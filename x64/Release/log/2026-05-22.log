@@ -1,0 +1,185 @@
+﻿[2026-05-22 16:23:37.224] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 16:23:37.231] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 16:23:37.232] QT_FA132_Test_SW
+[2026-05-22 16:23:37.233] Open->Start->Stop->Close
+[2026-05-22 16:23:37.372] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 16:23:49.276] GateSpec.ini saved: D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\GateSpec.ini
+[2026-05-22 16:23:50.952] DevID 0:GrabTab820
+[2026-05-22 16:23:51.045] DevID 0: sensor outformat=2 (Bayer/YUV phase %4)
+[2026-05-22 16:23:51.471] DevID 0:Open UC930#003095#2878#000 OK
+[2026-05-22 16:23:56.080] [FirmwareBurn] Wait 5000 ms after Start before burn (chip/I2C must be running).
+[2026-05-22 16:23:56.080] WorkProc(UC930#003095#2878#000) Enter
+[2026-05-22 16:23:56.172] DevID 0: carInitPower ret=1
+[2026-05-22 16:23:57.487] DevID 0: carInitGrab ret=1
+[2026-05-22 16:24:01.120] [FirmwareBurn] Burning in background (UI stays responsive).
+[2026-05-22 16:24:01.120] [FirmwareBurn] bin: D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\FlashData\031RABOM826200.bin
+[2026-05-22 16:24:04.137] [FirmwareBurn] WARN: capture thread dev=0 did not stop in 3000 ms (UI may hang; retry Stop)
+[2026-05-22 16:24:04.137] [FirmwareBurn] Dev 0: parallel VC burn (per-VC I2C slave from GateSpec D0_V#)
+[2026-05-22 16:24:04.140] [FirmwareBurn] Dev 0 VC 0: slave=0x34 (parallel, no VC mutex).
+[2026-05-22 16:24:16.142] WorkProc(UC930#003095#2878#000) Exit
+[2026-05-22 16:25:15.865] [FirmwareBurn] OK dev=0 vc=0
+[2026-05-22 16:25:15.866] [FirmwareBurn] ===== BURN FINISH: ALL PASS (next: power-cycle if enabled, then light test) =====
+[2026-05-22 16:25:15.867] [FirmwareBurn] RESULT Dev0 VC0: PASS
+[2026-05-22 16:25:15.893] [FirmwareBurn] Burn done; Stop 2s then Start again.
+[2026-05-22 16:25:18.050] [FirmwareBurn] Burn done; Stop 2s then Start again.
+[2026-05-22 16:25:18.069] [FirmwareBurn] Wait 5000 ms after Start before burn (chip/I2C must be running).
+[2026-05-22 16:25:18.069] WorkProc(UC930#003095#2878#000) Enter
+[2026-05-22 16:25:18.161] DevID 0: carInitPower ret=1
+[2026-05-22 16:25:19.462] DevID 0: carInitGrab ret=1
+[2026-05-22 16:25:24.093] [LightTest] GateSpec.ini: D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\GateSpec.ini
+[2026-05-22 16:25:24.093] [LightTest] delay=6000 ms | SsrFps[1.000,200.000] mA[0.000,2000.000] TempC[-40.0,125.0]
+[2026-05-22 16:25:24.093] [LightTest] temp I2C addr=0x34 mode=3 reg=0x1F40/0x1F41 formula (b0*1+b1*256)/16.000-50.000
+[2026-05-22 16:25:24.095] [LightTest] Dev0 VC0: OK | Fw=OK | SsrFps=40.001 [1.000,200.000] | Cur=99.200 mA [0.000,2000.000] | Temp=53.6 C [-40.0,125.0] | BadPx=N/A(0)
+[2026-05-22 16:25:24.096] [LightTest] report csv append: D:\FA132\hotpixel\20260522\LightTest_report.csv
+[2026-05-22 16:25:24.096] [LightTest] ===== FINAL: ALL PASS (Fw+SsrFps+Cur+Temp+BadPx per GateSpec) =====
+[2026-05-22 16:25:24.096] [LightTest] PASS
+[2026-05-22 16:25:27.111] [FirmwareBurn] WARN: capture thread dev=0 did not stop in 3000 ms (UI may hang; retry Stop)
+[2026-05-22 16:25:27.270] WorkProc(UC930#003095#2878#000) Exit
+[2026-05-22 16:25:29.106] DevID 0:Close UC930#003095#2878#000 OK
+[2026-05-22 16:25:30.541] DevID 0:GrabTab820
+[2026-05-22 16:25:30.658] DevID 0: sensor outformat=2 (Bayer/YUV phase %4)
+[2026-05-22 16:25:31.074] DevID 0:Open UC930#003095#2878#000 OK
+[2026-05-22 16:25:32.378] DevID 0:Close UC930#003095#2878#000 OK
+[2026-05-22 16:41:24.359] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 16:41:24.365] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 16:41:24.367] QT_FA132_Test_SW
+[2026-05-22 16:41:24.367] Open->Start->Stop->Close
+[2026-05-22 16:41:24.468] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 16:41:32.167] DevID 0:GrabTab820
+[2026-05-22 16:41:32.363] DevID 0: sensor outformat=2 (Bayer/YUV phase %4)
+[2026-05-22 16:41:32.751] DevID 0:Open UC930#003095#2878#000 OK
+[2026-05-22 16:41:35.329] [FirmwareBurn] Wait 5000 ms after Start before burn (chip/I2C must be running).
+[2026-05-22 16:41:35.329] WorkProc(UC930#003095#2878#000) Enter
+[2026-05-22 16:41:35.425] DevID 0: carInitPower ret=1
+[2026-05-22 16:41:36.728] DevID 0: carInitGrab ret=1
+[2026-05-22 16:41:40.368] [FirmwareBurn] Burning in background (UI stays responsive).
+[2026-05-22 16:41:40.369] [FirmwareBurn] bin: D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\FlashData\031RABOM826200.bin
+[2026-05-22 16:41:43.384] [FirmwareBurn] WARN: capture thread dev=0 did not stop in 3000 ms (UI may hang; retry Stop)
+[2026-05-22 16:41:43.384] [FirmwareBurn] Dev 0: parallel VC burn (per-VC I2C slave from GateSpec D0_V#)
+[2026-05-22 16:41:43.387] [FirmwareBurn] Dev 0 VC 0: slave=0x34 (parallel, no VC mutex).
+[2026-05-22 16:41:55.371] WorkProc(UC930#003095#2878#000) Exit
+[2026-05-22 16:42:55.039] [FirmwareBurn] OK dev=0 vc=0
+[2026-05-22 16:42:55.040] [FirmwareBurn] ===== BURN FINISH: ALL PASS (next: power-cycle if enabled, then light test) =====
+[2026-05-22 16:42:55.041] [FirmwareBurn] RESULT Dev0 VC0: PASS
+[2026-05-22 16:42:55.074] [FirmwareBurn] Power-cycle: Stop capture now, restart in 2s (no re-burn).
+[2026-05-22 16:42:57.234] [FirmwareBurn] Power-cycle: capture restarted.
+[2026-05-22 16:42:57.254] [FirmwareBurn] Wait 5000 ms for sensor settle before light test.
+[2026-05-22 16:42:57.254] WorkProc(UC930#003095#2878#000) Enter
+[2026-05-22 16:42:57.345] DevID 0: carInitPower ret=1
+[2026-05-22 16:42:58.658] DevID 0: carInitGrab ret=1
+[2026-05-22 16:43:03.273] [LightTest] GateSpec.ini: D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\GateSpec.ini
+[2026-05-22 16:43:03.274] [LightTest] delay=6000 ms | SsrFps[1.000,200.000] mA[0.000,2000.000] TempC[-40.0,125.0]
+[2026-05-22 16:43:03.274] [LightTest] temp I2C addr=0x34 mode=3 reg=0x1F40/0x1F41 formula (b0*1+b1*256)/16.000-50.000
+[2026-05-22 16:43:03.276] [LightTest] Dev0 VC0: OK | Fw=OK | SsrFps=40.001 [1.000,200.000] | Cur=98.200 mA [0.000,2000.000] | Temp=50.0 C [-40.0,125.0] | BadPx=N/A(0)
+[2026-05-22 16:43:03.277] [LightTest] report csv append: D:\FA132\hotpixel\20260522\LightTest_report.csv
+[2026-05-22 16:43:03.277] [LightTest] ===== FINAL: ALL PASS (Fw+SsrFps+Cur+Temp+BadPx per GateSpec) =====
+[2026-05-22 16:43:03.277] [LightTest] PASS
+[2026-05-22 16:43:06.291] [FirmwareBurn] WARN: capture thread dev=0 did not stop in 3000 ms (UI may hang; retry Stop)
+[2026-05-22 16:43:06.465] WorkProc(UC930#003095#2878#000) Exit
+[2026-05-22 16:43:50.684] DevID 0:Close UC930#003095#2878#000 OK
+[2026-05-22 16:49:56.380] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 16:49:56.388] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 16:49:56.389] QT_FA132_Test_SW
+[2026-05-22 16:49:56.389] Open->Start->Stop->Close
+[2026-05-22 16:49:56.531] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 16:54:14.850] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 16:54:14.857] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 16:54:14.863] QT_FA132_Test_SW
+[2026-05-22 16:54:14.863] Open->Start->Stop->Close
+[2026-05-22 16:54:15.005] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:01:25.343] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:01:25.352] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:01:25.354] QT_FA132_Test_SW
+[2026-05-22 17:01:25.356] Open->Start->Stop->Close
+[2026-05-22 17:01:25.497] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:08:51.151] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:08:51.160] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:08:51.162] QT_FA132_Test_SW
+[2026-05-22 17:08:51.163] Open->Start->Stop->Close
+[2026-05-22 17:08:51.303] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:09:10.948] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:09:10.950] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:09:10.952] QT_FA132_Test_SW
+[2026-05-22 17:09:10.952] Open->Start->Stop->Close
+[2026-05-22 17:09:11.081] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:12:13.079] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:12:13.087] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:12:13.089] QT_FA132_Test_SW
+[2026-05-22 17:12:13.090] Open->Start->Stop->Close
+[2026-05-22 17:12:13.231] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:17:58.803] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:17:58.813] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:17:58.817] QT_FA132_Test_SW
+[2026-05-22 17:17:58.818] Open->Start->Stop->Close
+[2026-05-22 17:17:58.961] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:18:46.391] DevID 0:GrabTab820
+[2026-05-22 17:18:46.526] DevID 0: sensor outformat=2 (Bayer/YUV phase %4)
+[2026-05-22 17:18:46.934] DevID 0:Open UC930#003095#2878#000 OK
+[2026-05-22 17:18:48.475] DevID 0:Close UC930#003095#2878#000 OK
+[2026-05-22 17:18:52.916] GateSpec.ini saved: D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\GateSpec.ini
+[2026-05-22 17:18:54.394] DevID 0:GrabTab820
+[2026-05-22 17:18:54.509] DevID 0: sensor outformat=2 (Bayer/YUV phase %4)
+[2026-05-22 17:18:54.892] DevID 0:Open UC930#003095#2878#000 OK
+[2026-05-22 17:18:55.327] WorkProc(UC930#003095#2878#000) Enter
+[2026-05-22 17:18:55.422] DevID 0: carInitPower ret=1
+[2026-05-22 17:18:56.726] DevID 0: carInitGrab ret=1
+[2026-05-22 17:19:01.333] [LightTest] GateSpec.ini: D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\GateSpec.ini
+[2026-05-22 17:19:01.333] [LightTest] delay=6000 ms | SsrFps[1.000,200.000] mA[0.000,2000.000] TempC[-40.0,125.0]
+[2026-05-22 17:19:01.333] [LightTest] temp I2C addr=0x34 mode=3 reg=0x1F40/0x1F41 formula (b0*1+b1*256)/16.000-50.000
+[2026-05-22 17:19:01.335] [LightTest] Dev0 VC0: OK | Fw=N/A | SsrFps=40.000 [1.000,200.000] | Cur=97.400 mA [0.000,2000.000] | Temp=31.9 C [-40.0,125.0] | BadPx=N/A(0)
+[2026-05-22 17:19:01.336] [LightTest] report csv append: D:\FA132\hotpixel\20260522\LightTest_report.csv
+[2026-05-22 17:19:01.336] [LightTest] ===== FINAL: ALL PASS (Fw+SsrFps+Cur+Temp+BadPx per GateSpec) =====
+[2026-05-22 17:19:01.336] [LightTest] PASS
+[2026-05-22 17:19:04.353] [FirmwareBurn] WARN: capture thread dev=0 did not stop in 3000 ms (UI may hang; retry Stop)
+[2026-05-22 17:19:04.511] WorkProc(UC930#003095#2878#000) Exit
+[2026-05-22 17:19:12.624] DevID 0:Close UC930#003095#2878#000 OK
+[2026-05-22 17:19:24.632] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:19:24.635] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:19:24.636] QT_FA132_Test_SW
+[2026-05-22 17:19:24.636] Open->Start->Stop->Close
+[2026-05-22 17:19:24.766] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:19:39.504] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:19:39.507] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:19:39.508] QT_FA132_Test_SW
+[2026-05-22 17:19:39.509] Open->Start->Stop->Close
+[2026-05-22 17:19:39.637] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:20:12.872] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:20:12.874] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:20:12.875] QT_FA132_Test_SW
+[2026-05-22 17:20:12.875] Open->Start->Stop->Close
+[2026-05-22 17:20:13.004] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:20:15.582] DevID 0:GrabTab820
+[2026-05-22 17:20:15.663] DevID 0: sensor outformat=2 (Bayer/YUV phase %4)
+[2026-05-22 17:20:16.034] DevID 0:Open UC930#003095#2878#000 OK
+[2026-05-22 17:20:16.780] WorkProc(UC930#003095#2878#000) Enter
+[2026-05-22 17:20:16.866] DevID 0: carInitPower ret=1
+[2026-05-22 17:20:18.179] DevID 0: carInitGrab ret=1
+[2026-05-22 17:20:22.792] [LightTest] GateSpec.ini: D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\GateSpec.ini
+[2026-05-22 17:20:22.792] [LightTest] delay=6000 ms | SsrFps[1.000,200.000] mA[0.000,2000.000] TempC[-40.0,125.0]
+[2026-05-22 17:20:22.792] [LightTest] temp I2C addr=0x34 mode=3 reg=0x1F40/0x1F41 formula (b0*1+b1*256)/16.000-50.000
+[2026-05-22 17:20:22.794] [LightTest] Dev0 VC0: OK | Fw=N/A | SsrFps=40.000 [1.000,200.000] | Cur=98.000 mA [0.000,2000.000] | Temp=32.9 C [-40.0,125.0] | BadPx=N/A(0)
+[2026-05-22 17:20:22.795] [LightTest] report csv append: D:\FA132\hotpixel\20260522\LightTest_report.csv
+[2026-05-22 17:20:22.795] [LightTest] ===== FINAL: ALL PASS (Fw+SsrFps+Cur+Temp+BadPx per GateSpec) =====
+[2026-05-22 17:20:22.795] [LightTest] PASS
+[2026-05-22 17:20:25.807] [FirmwareBurn] WARN: capture thread dev=0 did not stop in 3000 ms (UI may hang; retry Stop)
+[2026-05-22 17:20:25.965] WorkProc(UC930#003095#2878#000) Exit
+[2026-05-22 17:20:27.557] DevID 0:Close UC930#003095#2878#000 OK
+[2026-05-22 17:25:51.996] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:25:52.004] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:25:52.006] QT_FA132_Test_SW
+[2026-05-22 17:25:52.008] Open->Start->Stop->Close
+[2026-05-22 17:25:52.150] UC930#003095#2878#000  (Dev0, VC=1)
+[2026-05-22 17:31:28.803] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:31:28.811] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:31:28.813] QT_FA132_Test_SW
+[2026-05-22 17:31:28.815] Open->Start->Stop->Close
+[2026-05-22 17:31:28.829] No test box detected.
+[2026-05-22 17:31:43.522] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:31:43.530] WARN: DtccmKit not loaded ? carDrawImage may crash (copy SDK DLLs to exe folder)
+[2026-05-22 17:31:43.535] QT_FA132_Test_SW
+[2026-05-22 17:31:43.536] Open->Start->Stop->Close
+[2026-05-22 17:31:43.550] No test box detected.
+[2026-05-22 17:38:02.666] SDK DLL preload: 3 modules from D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\
+[2026-05-22 17:38:02.675] QT_FA132_Test_SW
+[2026-05-22 17:38:02.677] Open->Start->Stop->Close
+[2026-05-22 17:38:02.692] No test box detected.

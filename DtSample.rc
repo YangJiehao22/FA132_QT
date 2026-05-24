@@ -1,0 +1,334 @@
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#ifndef APSTUDIO_INVOKED
+#include "targetver.h"
+#endif
+#include "afxres.h"
+#include "verrsrc.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// ???(????????) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#ifndef APSTUDIO_INVOKED\r\n"
+    "#include ""targetver.h""\r\n"
+    "#endif\r\n"
+    "#include ""afxres.h""\r\n"
+    "#include ""verrsrc.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)\r\n"
+    "LANGUAGE 4, 2\r\n"
+    "#include ""res\\DtSample.rc2""  // ??Microsoft Visual C++ ????????r\n"
+    "#include ""l.CHS\\afxres.rc""      // ??????\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON                    "res\\DtSample.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOGEX 0, 0, 170, 62
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "??? DtSample"
+FONT 9, "MS Shell Dlg", 0, 0, 0x1
+BEGIN
+    ICON            IDR_MAINFRAME,IDC_STATIC,14,14,20,20
+    LTEXT           "DtSample 2.1",IDC_STATIC,42,14,114,8,SS_NOPREFIX
+    LTEXT           "Copyright (C) 2018",IDC_STATIC,42,26,114,8
+    DEFPUSHBUTTON   "???",IDOK,113,41,50,14,WS_GROUP
+END
+
+IDD_DTSAMPLE_DIALOG DIALOGEX 0, 0, 540, 231
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "QT_FA132_Software"
+FONT 9, "MS Shell Dlg", 0, 0, 0x1
+BEGIN
+    PUSHBUTTON      "Enum",IDC_BUTTON_ENUM,237,1,32,12
+    PUSHBUTTON      "Load",IDC_BUTTON_LOAD,169,1,32,12
+    PUSHBUTTON      "Start",IDC_BUTTON_START,308,1,32,12
+    PUSHBUTTON      "Open",IDC_BUTTON_OPEN,272,1,32,12
+    EDITTEXT        IDC_EDIT_INI,4,1,161,12,ES_AUTOHSCROLL
+    CONTROL         "",IDC_VIDEO0,"Static",SS_GRAYRECT | SS_NOTIFY,19,21,24,17,WS_EX_STATICEDGE
+    EDITTEXT        IDC_EDIT_MSG2,289,61,230,147,ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
+    CONTROL         "",IDC_VIDEO1,"Static",SS_GRAYRECT | SS_NOTIFY,50,21,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO2,"Static",SS_GRAYRECT | SS_NOTIFY,78,21,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO3,"Static",SS_GRAYRECT | SS_NOTIFY,105,22,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO4,"Static",SS_GRAYRECT | SS_NOTIFY,19,49,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO5,"Static",SS_GRAYRECT | SS_NOTIFY,50,49,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO6,"Static",SS_GRAYRECT | SS_NOTIFY,78,49,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO7,"Static",SS_GRAYRECT | SS_NOTIFY,105,50,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO8,"Static",SS_GRAYRECT | SS_NOTIFY,19,77,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO9,"Static",SS_GRAYRECT | SS_NOTIFY,50,77,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO10,"Static",SS_GRAYRECT | SS_NOTIFY,78,77,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO11,"Static",SS_GRAYRECT | SS_NOTIFY,105,78,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO12,"Static",SS_GRAYRECT | SS_NOTIFY,19,105,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO13,"Static",SS_GRAYRECT | SS_NOTIFY,50,105,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO14,"Static",SS_GRAYRECT | SS_NOTIFY,78,105,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO15,"Static",SS_GRAYRECT | SS_NOTIFY,105,106,24,17,WS_EX_STATICEDGE
+    PUSHBUTTON      "Edit",IDC_BUTTON_EDIT,201,1,32,12
+    CONTROL         "",IDC_VIDEO16,"Static",SS_GRAYRECT | SS_NOTIFY,18,128,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO17,"Static",SS_GRAYRECT | SS_NOTIFY,49,128,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO18,"Static",SS_GRAYRECT | SS_NOTIFY,77,128,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO19,"Static",SS_GRAYRECT | SS_NOTIFY,105,129,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO20,"Static",SS_GRAYRECT | SS_NOTIFY,18,156,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO21,"Static",SS_GRAYRECT | SS_NOTIFY,49,156,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO22,"Static",SS_GRAYRECT | SS_NOTIFY,77,156,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO23,"Static",SS_GRAYRECT | SS_NOTIFY,105,157,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO24,"Static",SS_GRAYRECT | SS_NOTIFY,18,184,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO25,"Static",SS_GRAYRECT | SS_NOTIFY,49,184,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO26,"Static",SS_GRAYRECT | SS_NOTIFY,77,184,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO27,"Static",SS_GRAYRECT | SS_NOTIFY,105,185,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO28,"Static",SS_GRAYRECT | SS_NOTIFY,18,212,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO29,"Static",SS_GRAYRECT | SS_NOTIFY,49,212,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO30,"Static",SS_GRAYRECT | SS_NOTIFY,77,212,24,17,WS_EX_STATICEDGE
+    CONTROL         "",IDC_VIDEO31,"Static",SS_GRAYRECT | SS_NOTIFY,105,213,24,17,WS_EX_STATICEDGE
+    PUSHBUTTON      "Channel",IDC_BUTTON_CHANNEL,477,1,32,12
+    PUSHBUTTON      "Spec",IDC_BUTTON_SPEC,345,1,128,56
+END
+
+
+IDD_DIALOG_CHANNEL DIALOGEX 0, 0, 320, 360
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Channel"
+FONT 9, "MS Shell Dlg", 0, 0, 0x1
+BEGIN
+    LTEXT           "",IDC_STATIC_CH_HINT,12,10,296,24
+    CONTROL         "",IDC_TREE_CHANNEL,"SysTreeView32",TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT | TVS_CHECKBOXES | WS_BORDER | WS_TABSTOP,12,38,296,260
+    PUSHBUTTON      "All",IDC_BTN_CH_ALL,12,308,72,22
+    PUSHBUTTON      "None",IDC_BTN_CH_NONE,92,308,72,22
+    DEFPUSHBUTTON   "OK",IDOK,148,308,72,22
+    PUSHBUTTON      "Cancel",IDCANCEL,228,308,80,22
+END
+IDD_IICDEBUG_DIALOG DIALOGEX 0, 0, 213, 131
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "I2C Debug"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    PUSHBUTTON      "Search Address",IDC_SEARCH_BUTTON,81,14,63,17
+    PUSHBUTTON      "Read",IDC_READ_BUTTON,43,94,50,14
+    PUSHBUTTON      "Write",IDC_WRITE_BUTTON,119,94,50,14
+    EDITTEXT        IDC_ADDRESS_EDIT,47,69,24,14,ES_AUTOHSCROLL
+    EDITTEXT        IDC_REGISTER_EDIT,94,69,32,14,ES_AUTOHSCROLL
+    EDITTEXT        IDC_VALUE_EDIT,146,69,34,14,ES_AUTOHSCROLL
+    LTEXT           "register",IDC_STATIC,100,54,26,8
+    LTEXT           "value",IDC_STATIC,154,54,18,8
+    LTEXT           "0x",IDC_STATIC,28,72,9,8
+    LTEXT           "address",IDC_STATIC,49,54,26,8
+    LTEXT           "I2C mode",IDC_STATIC,16,39,32,8
+    COMBOBOX        IDC_I2C_MODE_COMBO,61,36,110,59,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 2,0,1,35634
+ PRODUCTVERSION 2,0,1,35634
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName", "DOTHINKEY"
+            VALUE "FileDescription", "DtSample"
+            VALUE "FileVersion", "2.0.1.35634"
+            VALUE "InternalName", "DtSample.exe"
+            VALUE "LegalCopyright", "DOTHINKEY. All Rights Reserved."
+            VALUE "OriginalFilename", "DtSample.exe"
+            VALUE "ProductName", "DtSample"
+            VALUE "ProductVersion", "2.0.1.35634"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 163
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 55
+    END
+
+    IDD_DTSAMPLE_DIALOG, DIALOG
+    BEGIN
+        RIGHTMARGIN, 535
+        TOPMARGIN, 1
+        BOTTOMMARGIN, 230
+    END
+
+        IDD_DIALOG_CHANNEL, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 313
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 353
+    END
+
+    IDD_IICDEBUG_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 206
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 124
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_DTSAMPLE_DIALOG AFX_DIALOG_LAYOUT 
+BEGIN
+    0x0000
+END
+
+IDD_DIALOG_OSTEST AFX_DIALOG_LAYOUT 
+BEGIN
+    0x0000
+END
+
+IDD_ABOUTBOX AFX_DIALOG_LAYOUT 
+BEGIN
+    0x0000
+END
+
+IDD_DIALOG_CHANNEL AFX_DIALOG_LAYOUT 
+BEGIN
+    0x0000
+END
+
+IDD_IICDEBUG_DIALOG AFX_DIALOG_LAYOUT 
+BEGIN
+    0x0000
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_MENU1 MENU
+BEGIN
+    POPUP "Device"
+    BEGIN
+        MENUITEM "Internal Status",             ID_DEVICE_INTERNALSTATUS
+        MENUITEM "Internal Debug",              ID_DEVICE_INTERNALDEBUG
+        MENUITEM "Grab Hold",                   ID_DEVICE_HOLD
+        MENUITEM "Grab Restart",                ID_DEVICE_RESTART
+        MENUITEM "Save Pic",                    ID_DEVICE_SAVEPIC
+        MENUITEM "I2C DeBug",                   ID_DEVICE_I2CDEBUG
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE
+BEGIN
+    IDS_ABOUTBOX            "??? DtSample(&A)..."
+END
+
+#endif    // ???(????????) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE 4, 2
+#include "res\DtSample.rc2"  // rc2
+#include "l.CHS\afxres.rc"      // afx std
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

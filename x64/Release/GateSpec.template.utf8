@@ -1,0 +1,117 @@
+; GateSpec.ini - 与 DtSample.exe 同目录
+; 可在「规格设定」对话框修改，也可直接编辑本文件（分号开头为注释行）
+
+[timing]
+; LightTest 开流后等待多久再采样(毫秒)，建议>=2000，等图像/电流稳定
+DelayMs={{DELAY_MS}}
+
+[limits]
+; 各 Dev/VC 默认共用：Sensor 帧率、电流(mA)、芯片温度(C) 合格范围
+MinSsrFps={{MIN_SSR_FPS}}
+MaxSsrFps={{MAX_SSR_FPS}}
+MinCurrent_mA={{MIN_CUR_MA}}
+MaxCurrent_mA={{MAX_CUR_MA}}
+MinSensorTemp_C={{MIN_TEMP_C}}
+MaxSensorTemp_C={{MAX_TEMP_C}}
+
+[sensor_temp_i2c]
+; 温度公式 Temp(C)=(b0*CoeffLow+b1*CoeffHigh)/Divisor+Offset，b0/b1 来自 RegLow/RegHigh
+; Enabled=1 时 LightTest 读 I2C 温度并参与判定
+Enabled={{TEMP_EN}}
+; I2C 从机地址(十六进制)
+I2cAddr={{TEMP_ADDR}}
+; I2C 读写模式(与 SDK carReadSensorI2c 一致)
+I2cMode={{TEMP_MODE}}
+; 温度寄存器地址(十六进制)，RegHigh=0 表示只读单字节
+RegLow={{TEMP_REGLO}}
+RegHigh={{TEMP_REGHI}}
+CoeffLow={{TEMP_COEFFLO}}
+CoeffHigh={{TEMP_COEFFHI}}
+Divisor={{TEMP_DIV}}
+Offset={{TEMP_OFF}}
+
+[sensor_temp_i2c_vc]
+; FA132 最多 8 设备 x 4 VC，键名 D{0..7}_V{0..3}，与主界面预览格一致
+D0_V0=0x34
+D0_V1=0x84
+D0_V2=0x86
+D0_V3=0x88
+D1_V0=0x34
+D1_V1=0x84
+D1_V2=0x86
+D1_V3=0x88
+D2_V0=0x34
+D2_V1=0x84
+D2_V2=0x86
+D2_V3=0x88
+D3_V0=0x34
+D3_V1=0x84
+D3_V2=0x86
+D3_V3=0x88
+D4_V0=0x34
+D4_V1=0x84
+D4_V2=0x86
+D4_V3=0x88
+D5_V0=0x34
+D5_V1=0x84
+D5_V2=0x86
+D5_V3=0x88
+D6_V0=0x34
+D6_V1=0x84
+D6_V2=0x86
+D6_V3=0x88
+D7_V0=0x34
+D7_V1=0x84
+D7_V2=0x86
+D7_V3=0x88
+
+[bad_pixel_dark]
+; 黑场亮坏点检测：须在暗场下测试(盖镜头/暗箱)，在 LightTest 延时后执行
+; Enabled=1 开启；=0 关闭(不报 BadPx)
+Enabled={{BP_EN}}
+; AlgoMode: 0=8邻域简单算法  1=华为分通道算法(推荐，要求中心10% ROI均值<=50)
+AlgoMode={{BP_ALGO}}
+; BayerPattern: -1=自动(SDK/传感器ini)  0=RGGB 1=GRBG 2=GBRG 3=BGGR(08B等常为3)
+BayerPattern={{BP_BAYER}}
+; MaxBadPixels: 华为=每颜色通道允许亮点簇个数上限；8邻域=热点总数上限
+MaxBadPixels={{BP_MAX}}
+; HotDelta: 华为=单伤阈值|像素-全图均值|；8邻域=相对8邻域均值的增量
+HotDelta={{BP_HOTDELTA}}
+; BrightContrastCluster: 华为亮点群(簇)阈值，0=与 HotDelta 相同
+BrightContrastCluster={{BP_CL_TH}}
+; ClusterMinPixels: 华为判定为簇的最少像素数(连通域>=此值才计1簇)
+ClusterMinPixels={{BP_CL_MIN}}
+; SingleDefectPermyriad: 华为单伤上限，单位=个/10万像素(如1表示约每100万像素允许1个单伤)
+SingleDefectPermyriad={{BP_PPM}}
+; GrGbToG: 华为是否将 Gr+Gb 合并为 G 通道统计(1=合并 0=R/Gr/Gb/B 四通道)
+GrGbToG={{BP_GRGB}}
+; HotAbsMin: 8邻域专用，像素灰度绝对下限(低于此不判热点)
+HotAbsMin={{BP_ABS}}
+; BorderPx: 8邻域专用，图像四边忽略宽度(像素)
+BorderPx={{BP_BORDER}}
+; SaveSnapshot: 1=PASS与FAIL均抓图；0=不保存
+SaveSnapshot={{BP_SAVE}}
+; SaveBmp/SavePackedRaw/SaveUnpack12/SaveUnpack10: 勾选才保存对应文件
+SaveBmp={{BP_SAVE_BMP}}
+SavePackedRaw={{BP_SAVE_PACKED}}
+SaveUnpack12={{BP_SAVE_U12}}
+SaveUnpack10={{BP_SAVE_U10}}
+; SaveDir: 抓图与 CSV 根目录，留空则使用 exe\log\LightTest\
+SaveDir={{BP_DIR}}
+
+[firmware_burn]
+; Sony ISX031：与睿博一致 exe\FlashData\031{FovType}.bin（512KB）
+; 须先 Open 再 Start，Start 后 FwWarmupMs 毫秒再烧录（芯片先工作）
+; Enabled=1 开启；烧录 NG 则 Stop，不进入 LightTest
+Enabled={{FW_EN}}
+; FovType: RABOB065200 | RABOM826200 | RABOM826100 | RABOM826100Flip | RABOM82660
+FovType={{FW_FOV_TYPE}}
+FovTypeIndex={{FW_FOV_INDEX}}
+FlashDataDir={{FW_FLASH_DIR}}
+; FwWarmupMs: Start 后等待芯片/I2C 就绪再烧录（睿博约 3s）
+FwWarmupMs={{FW_WARMUP_MS}}
+; PostBurnDelayMs: 烧录完成（含断电上电）后到 LightTest 的间隔
+PostBurnDelayMs={{FW_POST_BURN_MS}}
+I2cRateKbps={{FW_I2C_RATE}}
+AutoDetectSlave={{FW_AUTO_SLAVE}}
+PowerCycleAfter={{FW_POWER_CYCLE}}
