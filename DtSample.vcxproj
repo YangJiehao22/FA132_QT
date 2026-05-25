@@ -223,6 +223,7 @@ if exist "$(ProjectDir)GateSpec.template.utf8" copy /Y "$(ProjectDir)GateSpec.te
     <None Include="res\DtSample.rc2" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DtDpiUi.h" />
     <ClInclude Include="DtEncoding.h" />
     <ClInclude Include="DtZhUtf8.h" />
     <ClInclude Include="DtBadPixelDetect.h" />
@@ -240,6 +241,7 @@ if exist "$(ProjectDir)GateSpec.template.utf8" copy /Y "$(ProjectDir)GateSpec.te
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="DtDpiUi.cpp" />
     <ClCompile Include="DtEncoding.cpp" />
     <ClCompile Include="DtBadPixelDetect.cpp" />
     <ClCompile Include="DtHotPixelAlgo.cpp" />

@@ -166,11 +166,13 @@ public:
 	void ClearFirmwareBurnUiState();
 	void ResetFirmwareBurnUiForEnabledChannels();
 
-	/** After image stable: log per VC; returns true iff every channel PASS */
+	/** Parallel light test per enabled Dev/VC (SsrFps/Cur/Temp/BadPx/Fw). */
 	bool RunLightGatePerChannelReport();
 	/** Parallel Sony031 flash on enabled Dev/VC (same Dev: all VC threads in parallel).
 	    afterStart=true: Start already running. Per-VC I2C addr from sensor_temp_i2c_vc grid. */
 	bool RunFirmwareBurnParallel(bool afterStart = false);
+	/** Parallel post-burn register verify on enabled Dev/VC (same pattern as burn). */
+	bool RunFirmwareBurnVerifyAll();
 	void SetFirmwareBurnProgressWnd(HWND hwnd) { m_hwndFirmwareBurnProgress = hwnd; }
 	/** Clear saved gate UI state (call when user starts a new capture session) */
 	void ClearLightGateResults();
@@ -181,6 +183,8 @@ public:
 	bool m_bFirmwareBurnHasResult;
 	bool m_bFirmwareBurnInProgress;
 	bool m_bFirmwareBurnPass[MAX_CC16 * MAX_DEV][MAX_VC];
+	bool m_bFirmwareBurnVerifyHasResult;
+	bool m_bFirmwareBurnVerifyPass[MAX_CC16 * MAX_DEV][MAX_VC];
 	bool PauseWorkThreadsForFirmwareBurn();
 
 	/** Grab one frame and convert to 8-bit gray (thread-safe with WorkProc). */
@@ -232,6 +236,8 @@ protected:
 	CString BuildLightTestOutputDir(const CTime& time) const;
 	void WriteLightTestReport(const std::vector<LightTestChannelRecord>& rows, bool allPass) const;
 	static unsigned __stdcall FirmwareBurnThreadProc(void* pParam);
+	static unsigned __stdcall FirmwareVerifyThreadProc(void* pParam);
+	static unsigned __stdcall LightGateThreadProc(void* pParam);
 
 	CString m_lightTestSessionDir;
 	CString m_lightTestSessionTag;

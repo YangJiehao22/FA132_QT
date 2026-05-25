@@ -23,8 +23,19 @@ struct GateFirmwareBurnCfg
 	/** FA132: burn by per-VC I2C addr (Dothinkey); false = call SetMipiImageVC before burn. */
 	bool useMipiVcForBurn;
 	bool powerCycleAfter;
+	/** After burn + power-cycle: read key regs (Ruibo ReadFlashCalibrationResult). */
+	bool verifyEnabled;
 	/** Resolved full path (runtime). */
 	TCHAR binPath[MAX_PATH];
+};
+
+struct Sony031VerifyResult
+{
+	bool success;
+	int failIndex;
+	unsigned short expected;
+	unsigned short actual;
+	unsigned short values[14];
 };
 
 struct Sony031BurnResult
@@ -53,3 +64,12 @@ bool Sony031FlashProgram(
 	const GateFirmwareBurnCfg& cfg,
 	unsigned char slaveHint,
 	Sony031BurnResult* outResult);
+
+/** Post-burn register check (Ruibo ReadFlashCalibrationResult), per FovTypeIndex. */
+bool Sony031VerifyFlashCalibration(
+	int devId,
+	int vcId,
+	int fovTypeIndex,
+	const GateFirmwareBurnCfg& cfg,
+	unsigned char slaveHint,
+	Sony031VerifyResult* outResult);

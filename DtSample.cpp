@@ -5,6 +5,7 @@
 #include "stdafx.h"
 #include "DtSample.h"
 #include "DtSampleDlg.h"
+#include "DtDpiUi.h"
 #include <afxvisualmanagerwindows.h>
 
 #ifdef _DEBUG
@@ -30,6 +31,8 @@ BOOL CDtSampleApp::InitInstance()
 	InitCommonControlsEx(&InitCtrls);
 
 	CWinApp::InitInstance();
+
+	DtEnableProcessDpiAwareness();
 
 	AfxEnableControlContainer();
 

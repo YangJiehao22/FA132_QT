@@ -82,6 +82,8 @@
 #define IDC_BTN_CH_ALL                  2206
 #define IDC_BTN_CH_NONE                 2207
 #define IDC_STATIC_CH_HINT              2208
+#define IDC_STATIC_CH_GROUP             2209
+#define IDC_STATIC_CH_STATUS            2210
 #define IDC_CHECK1                      1046
 #define IDC_LOOP_DISPLAY                1046
 #define IDC_EDIT_VC_FR_DLY              1047

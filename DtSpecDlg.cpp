@@ -2,6 +2,7 @@
 #include "DtSample.h"
 #include "DtSpecDlg.h"
 #include "DtEncoding.h"
+#include "DtDpiUi.h"
 #include "afxdialogex.h"
 
 #include <math.h>
@@ -89,6 +90,7 @@ static int LabelWidth(CWnd* pDlg, CWnd& lbl, double scale)
 struct SpecLayoutMetrics
 {
 	int rowH;
+	int chkRowH;
 	int rowStep;
 	int editH;
 	int gap;
@@ -107,21 +109,39 @@ static SpecLayoutMetrics GetSpecLayoutMetrics(CWnd* pDlg, CFont& font, double sc
 	if (pOld)
 		dc.SelectObject(pOld);
 
-	m.rowH = tm.tmHeight + tm.tmExternalLeading + (int)(14 * scale);
-	if (m.rowH < (int)(34 * scale))
-		m.rowH = (int)(34 * scale);
-	m.gap = (int)(14 * scale);
-	m.rowStep = m.rowH + m.gap;
-	m.editH = max(m.rowH - 2, (int)(24 * scale));
-	m.grpHdr = (int)(26 * scale);
-	m.grpPadB = (int)(12 * scale);
-	m.grpGap = (int)(18 * scale);
+	const int sysChk = GetSystemMetrics(SM_CYMENUCHECK);
+	m.rowH = tm.tmHeight + tm.tmExternalLeading + (int)(12 * scale);
+	if (m.rowH < (int)(30 * scale))
+		m.rowH = (int)(30 * scale);
+	m.chkRowH = max(m.rowH, sysChk + (int)(14 * scale));
+	if (m.chkRowH < (int)(38 * scale))
+		m.chkRowH = (int)(38 * scale);
+	m.gap = (int)(12 * scale);
+	m.rowStep = m.chkRowH + m.gap;
+	m.editH = max(m.rowH - 2, (int)(26 * scale));
+	m.grpHdr = (int)(28 * scale);
+	m.grpPadB = (int)(14 * scale);
+	m.grpGap = (int)(16 * scale);
 	return m;
 }
 
 static void ParkHiddenWnd(CWnd* p)
 {
 	MoveWnd(p, CRect(-4000, -4000, -3900, -3900));
+}
+
+static int SpecButtonHeight(CWnd* pDlg, CFont& font, double scale)
+{
+	if (pDlg == NULL)
+		return (int)(34 * scale);
+	CClientDC dc(pDlg);
+	CFont* pOld = dc.SelectObject(&font);
+	TEXTMETRIC tm = {};
+	dc.GetTextMetrics(&tm);
+	if (pOld)
+		dc.SelectObject(pOld);
+	const int h = tm.tmHeight + tm.tmExternalLeading + (int)(14 * scale);
+	return max((int)(46 * scale), h);
 }
 
 static int MeasureStaticHeight(CWnd* pWnd, int width, const CString& text)
@@ -143,6 +163,13 @@ CDtSpecDlg::CDtSpecDlg(DtCarFunction* pFn, CWnd* pParent)
 	: CDialogEx(CDtSpecDlg::IDD, pParent)
 	, m_pFn(pFn)
 	, m_specActivePage(0)
+	, m_specFrameReady(false)
+	, m_specLayoutScale(0.0)
+	, m_specMargin(0)
+	, m_specTabH(0)
+	, m_specBtnBandH(0)
+	, m_specBtnH(0)
+	, m_specBtnW(0)
 {
 }
 
@@ -239,6 +266,8 @@ BEGIN_MESSAGE_MAP(CDtSpecDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_RAD_BP_ALGO_NEIGHBOR, &CDtSpecDlg::OnBnClickedRadBpAlgo)
 	ON_BN_CLICKED(IDC_RAD_BP_ALGO_HUAWEI, &CDtSpecDlg::OnBnClickedRadBpAlgo)
 	ON_CONTROL(CBN_SELCHANGE, IDC_COMBO_SPEC_FW_FOV, &CDtSpecDlg::OnCbnSelchangeFwFov)
+	ON_BN_CLICKED(IDC_CHK_SPEC_FW_EN, &CDtSpecDlg::OnBnClickedChkFwEn)
+	ON_MESSAGE(WM_DPICHANGED, &CDtSpecDlg::OnDpiChanged)
 END_MESSAGE_MAP()
 
 BOOL CDtSpecDlg::OnEraseBkgnd(CDC* pDC)
@@ -259,9 +288,7 @@ void CDtSpecDlg::UpdateFormulaText()
 
 double CDtSpecDlg::GetSpecUiScale() const
 {
-	CClientDC dc(const_cast<CDtSpecDlg*>(this));
-	const int dpiY = dc.GetDeviceCaps(LOGPIXELSY);
-	return max(1.0, dpiY / 96.0);
+	return DtGetWindowUiScale(m_hWnd);
 }
 
 void CDtSpecDlg::HideGatePageControls()
@@ -326,11 +353,11 @@ void CDtSpecDlg::HideFirmwarePageControls()
 			ParkHiddenWnd(wnds[i]);
 		}
 	}
-	/* Do NOT ParkHiddenWnd combo: resizing to 100x100 leaves drop list 1 row only. */
 	if (::IsWindow(m_cmbFwFov.m_hWnd))
 	{
 		m_cmbFwFov.ShowWindow(SW_HIDE);
 		m_cmbFwFov.EnableWindow(FALSE);
+		ParkHiddenWnd(&m_cmbFwFov);
 	}
 }
 
@@ -348,10 +375,9 @@ BOOL CDtSpecDlg::PreTranslateMessage(MSG* pMsg)
 	return CDialogEx::PreTranslateMessage(pMsg);
 }
 
-int CDtSpecDlg::LayoutGatePage(const CRect& viewport, double scale)
+int CDtSpecDlg::LayoutGatePage(const CRect& viewport, double scale, bool bShow)
 {
-	HideBadPixelPageControls();
-	HideFirmwarePageControls();
+	const bool allowShow = bShow && (m_specActivePage == 0);
 
 	const SpecLayoutMetrics m = GetSpecLayoutMetrics(this, m_fontBody, scale);
 	const int pad = (int)(14 * scale);
@@ -362,7 +388,9 @@ int CDtSpecDlg::LayoutGatePage(const CRect& viewport, double scale)
 	const int maxEditW = (int)(140 * scale);
 	const int y0 = viewport.top;
 
-	auto show = [](CWnd& w) {
+	auto show = [allowShow](CWnd& w) {
+		if (!allowShow)
+			return;
 		w.EnableWindow(TRUE);
 		w.ShowWindow(SW_SHOW);
 	};
@@ -425,11 +453,11 @@ int CDtSpecDlg::LayoutGatePage(const CRect& viewport, double scale)
 	{
 		const int gTop = y;
 		const int tempRows = 5;
-		const int gH = m.grpHdr + m.grpPadB + m.rowH + m.rowStep * (tempRows - 1);
+		const int gH = m.grpHdr + m.grpPadB + m.chkRowH + m.rowStep * (tempRows - 1);
 		MoveWnd(&m_grpTempI2c, CRect(x, gTop, x + w, gTop + gH));
 		show(m_grpTempI2c);
 		int cy = gTop + m.grpHdr;
-		MoveWnd(&m_chkTempEn, CRect(x + pad, cy, x + w - pad, cy + m.rowH));
+		MoveWnd(&m_chkTempEn, CRect(x + pad, cy, x + w - pad, cy + m.chkRowH));
 		show(m_chkTempEn);
 		cy += m.rowStep;
 		place2col(cy, m_lblTempAddr, m_edTempAddr, m_lblTempMode, m_edTempMode);
@@ -439,28 +467,44 @@ int CDtSpecDlg::LayoutGatePage(const CRect& viewport, double scale)
 		place2col(cy, m_lblTempCoeffLo, m_edTempCoeffLo, m_lblTempCoeffHi, m_edTempCoeffHi);
 		cy += m.rowStep;
 		place2col(cy, m_lblTempDiv, m_edTempDiv, m_lblTempOffset, m_edTempOffset);
-		y = gTop + gH + m.grpGap;
+		y = max(gTop + gH, cy + m.rowH) + m.grpGap;
 	}
 
 	const int formulaH = max(m.rowH + (int)(4 * scale), (int)(32 * scale));
-	MoveWnd(&m_stFormula, CRect(x, y, x + w, y + formulaH));
-	show(m_stFormula);
-	y += formulaH + m.gap;
+	int formBottom = y + formulaH;
+	if (viewport.bottom > y && formBottom > viewport.bottom)
+		formBottom = viewport.bottom;
+	if (formBottom > y)
+	{
+		MoveWnd(&m_stFormula, CRect(x, y, x + w, formBottom));
+		show(m_stFormula);
+		y = formBottom + m.gap;
+	}
 
 	CString hintText;
 	m_stHint.GetWindowText(hintText);
-	const int hintH = max((int)(32 * scale), MeasureStaticHeight(&m_stHint, w, hintText));
-	MoveWnd(&m_stHint, CRect(x, y, x + w, y + hintH));
-	show(m_stHint);
-	y += hintH + pad;
+	int hintH = max((int)(32 * scale), MeasureStaticHeight(&m_stHint, w, hintText));
+	const int maxBottom = viewport.bottom;
+	if (maxBottom > y && y + hintH > maxBottom)
+		hintH = max(maxBottom - y, m.rowH);
+	if (maxBottom > y && hintH > 0)
+	{
+		MoveWnd(&m_stHint, CRect(x, y, x + w, y + hintH));
+		show(m_stHint);
+		y += hintH + pad;
+		if (y > maxBottom)
+			y = maxBottom;
+	}
 
 	return y - y0;
 }
 
-int CDtSpecDlg::LayoutBadPixelPage(const CRect& viewport, double scale)
+int CDtSpecDlg::LayoutBadPixelPage(const CRect& viewport, double scale, bool bShow)
 {
-	HideGatePageControls();
-	HideFirmwarePageControls();
+	const bool allowShow = bShow && (m_specActivePage == 1);
+
+	if (allowShow)
+		UpdateBadPixelLabels();
 
 	const SpecLayoutMetrics m = GetSpecLayoutMetrics(this, m_fontBody, scale);
 	const int pad = (int)(14 * scale);
@@ -474,7 +518,9 @@ int CDtSpecDlg::LayoutBadPixelPage(const CRect& viewport, double scale)
 
 	const BOOL huawei = (m_radBpHuawei.GetCheck() == BST_CHECKED);
 
-	auto show = [](CWnd& w) {
+	auto show = [allowShow](CWnd& w) {
+		if (!allowShow)
+			return;
 		w.EnableWindow(TRUE);
 		w.ShowWindow(SW_SHOW);
 	};
@@ -511,7 +557,7 @@ int CDtSpecDlg::LayoutBadPixelPage(const CRect& viewport, double scale)
 		show(ed);
 	};
 
-	MoveWnd(&m_chkBpEn, CRect(x, y, x + w, y + m.rowH));
+	MoveWnd(&m_chkBpEn, CRect(x, y, x + w, y + m.chkRowH));
 	show(m_chkBpEn);
 	y += m.rowStep;
 
@@ -519,8 +565,8 @@ int CDtSpecDlg::LayoutBadPixelPage(const CRect& viewport, double scale)
 	const int radAreaW = w - lblAlgoW - m.gap;
 	const int radW = (radAreaW - m.gap) / 2;
 	MoveWnd(&m_lblBpAlgo, CRect(x, y, x + lblAlgoW, y + m.rowH));
-	MoveWnd(&m_radBpNeighbor, CRect(x + lblAlgoW + m.gap, y, x + lblAlgoW + m.gap + radW, y + m.rowH));
-	MoveWnd(&m_radBpHuawei, CRect(x + lblAlgoW + m.gap + radW + m.gap, y, x + w, y + m.rowH));
+	MoveWnd(&m_radBpNeighbor, CRect(x + lblAlgoW + m.gap, y, x + lblAlgoW + m.gap + radW, y + m.chkRowH));
+	MoveWnd(&m_radBpHuawei, CRect(x + lblAlgoW + m.gap + radW + m.gap, y, x + w, y + m.chkRowH));
 	show(m_lblBpAlgo);
 	show(m_radBpNeighbor);
 	show(m_radBpHuawei);
@@ -541,7 +587,7 @@ int CDtSpecDlg::LayoutBadPixelPage(const CRect& viewport, double scale)
 		{
 			const int yy = gTop + m.grpHdr + m.rowStep;
 			const int cx = x + pad + colW + m.gap;
-			MoveWnd(&m_chkBpGrGbToG, CRect(cx, yy, cx + colW, yy + m.rowH));
+			MoveWnd(&m_chkBpGrGbToG, CRect(cx, yy, cx + colW, yy + m.chkRowH));
 			show(m_chkBpGrGbToG);
 		}
 
@@ -596,19 +642,19 @@ int CDtSpecDlg::LayoutBadPixelPage(const CRect& viewport, double scale)
 	place2col(y, m_lblBpMax, m_edBpMax, m_lblBpHotDelta, m_edBpHotDelta);
 	y += m.rowStep + m.gap;
 
-	MoveWnd(&m_chkBpSave, CRect(x, y, x + w, y + m.rowH));
+	MoveWnd(&m_chkBpSave, CRect(x, y, x + w, y + m.chkRowH));
 	show(m_chkBpSave);
 	y += m.rowStep;
 
 	const int snapTop = y;
-	const int snapH = m.grpHdr + m.grpPadB + m.rowH + m.rowStep * 3;
+	const int snapH = m.grpHdr + m.grpPadB + m.chkRowH + m.rowStep * 3;
 	MoveWnd(&m_grpBpSnapFiles, CRect(x, snapTop, x + w, snapTop + snapH));
 	show(m_grpBpSnapFiles);
 	int sy = snapTop + m.grpHdr;
 	CButton* snapChk[4] = { &m_chkBpSaveBmp, &m_chkBpSavePacked, &m_chkBpSaveU12, &m_chkBpSaveU10 };
 	for (int i = 0; i < 4; i++)
 	{
-		MoveWnd(snapChk[i], CRect(x + pad, sy, x + w - pad, sy + m.rowH));
+		MoveWnd(snapChk[i], CRect(x + pad, sy, x + w - pad, sy + m.chkRowH));
 		show(*snapChk[i]);
 		sy += m.rowStep;
 	}
@@ -634,10 +680,9 @@ int CDtSpecDlg::LayoutBadPixelPage(const CRect& viewport, double scale)
 	return y - y0;
 }
 
-int CDtSpecDlg::LayoutFirmwarePage(const CRect& viewport, double scale)
+int CDtSpecDlg::LayoutFirmwarePage(const CRect& viewport, double scale, bool bShow)
 {
-	HideGatePageControls();
-	HideBadPixelPageControls();
+	const bool allowShow = bShow && (m_specActivePage == 2);
 
 	const SpecLayoutMetrics m = GetSpecLayoutMetrics(this, m_fontBody, scale);
 	const int pad = (int)(16 * scale);
@@ -646,12 +691,14 @@ int CDtSpecDlg::LayoutFirmwarePage(const CRect& viewport, double scale)
 	const int y0 = viewport.top;
 	int y = y0 + pad;
 
-	auto show = [](CWnd& w) {
+	auto show = [allowShow](CWnd& w) {
+		if (!allowShow)
+			return;
 		w.EnableWindow(TRUE);
 		w.ShowWindow(SW_SHOW);
 	};
 
-	const int chkH = m.rowH;
+	const int chkH = m.chkRowH;
 	const int fovLblW = LabelWidth(this, m_lblFwFov, scale);
 	const int warmLblW = LabelWidth(this, m_lblFwWarmup, scale);
 	const int pathLblW = LabelWidth(this, m_lblFwPath, scale);
@@ -674,6 +721,7 @@ int CDtSpecDlg::LayoutFirmwarePage(const CRect& viewport, double scale)
 	MoveWnd(&m_lblFwFov, CRect(ix, gy, ix + fovLblW, gy + m.rowH));
 	show(m_lblFwFov);
 	MoveWnd(&m_cmbFwFov, CRect(ix + fovLblW + m.gap, gy, ix + iw, gy + comboH));
+	m_cmbFwFov.SetItemHeight(-1, m.rowH);
 	show(m_cmbFwFov);
 	gy += comboH + m.gap;
 
@@ -691,98 +739,229 @@ int CDtSpecDlg::LayoutFirmwarePage(const CRect& viewport, double scale)
 
 	MoveWnd(&m_stFwHint, CRect(ix, gy, ix + iw, gy + hintH));
 	show(m_stFwHint);
-	m_grpFirmware.EnableWindow(TRUE);
-	m_grpFirmware.ShowWindow(SW_SHOW);
+	if (allowShow)
+	{
+		m_grpFirmware.EnableWindow(TRUE);
+		m_grpFirmware.ShowWindow(SW_SHOW);
+	}
 	y += gH + pad;
 
 	return y - y0;
 }
 
-void CDtSpecDlg::LayoutSpecDialog()
+void CDtSpecDlg::ResizeSpecClient(int clientW, int clientH)
 {
-	const double scale = GetSpecUiScale();
-	const int margin = (int)(16 * scale);
-	const int tabH = (int)(32 * scale);
-	const int btnH = (int)(34 * scale);
-	const int btnW = (int)(100 * scale);
-	const int btnGap = (int)(12 * scale);
-
 	CRect wr;
-	SystemParametersInfo(SPI_GETWORKAREA, 0, &wr, 0);
+	GetWindowRect(&wr);
+	CRect rc(0, 0, clientW, clientH);
+	CalcWindowRect(&rc, CWnd::adjustOutside);
+	SetWindowPos(NULL, wr.left, wr.top, rc.Width(), rc.Height(), SWP_NOZORDER);
+}
 
-	const int page = m_specActivePage;
-	const int wantW = min((int)(720 * scale), wr.Width() - (int)(32 * scale));
+void CDtSpecDlg::ClampSpecDialogToWorkArea(const CRect& workArea)
+{
+	CRect wr;
+	GetWindowRect(&wr);
+	int x = wr.left;
+	int y = wr.top;
+	if (wr.right > workArea.right)
+		x = workArea.right - wr.Width();
+	if (wr.left < workArea.left)
+		x = workArea.left;
+	if (wr.bottom > workArea.bottom)
+		y = workArea.bottom - wr.Height();
+	if (wr.top < workArea.top)
+		y = workArea.top;
+	if (x != wr.left || y != wr.top)
+		SetWindowPos(NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+}
 
-	const DWORD style = GetStyle();
-	const DWORD exStyle = GetExStyle();
+int CDtSpecDlg::MaxClientHeightForWorkArea(int clientW, const CRect& workArea, double scale) const
+{
+	const int maxOuterH = workArea.Height() - (int)(16 * scale);
+	if (maxOuterH <= 0)
+		return (int)(480 * scale);
 
-	HideAllSpecPageControls();
+	CDtSpecDlg* pDlg = const_cast<CDtSpecDlg*>(this);
+	auto outerHForClient = [&](int clientH) -> int {
+		CRect rc(0, 0, clientW, clientH);
+		pDlg->CalcWindowRect(&rc, CWnd::adjustOutside);
+		return rc.Height();
+	};
 
-	const CRect measureArea(0, 0, max(wantW - margin * 2, (int)(500 * scale)), 20000);
-	int contentH = 0;
-	if (page == 0)
+	int lo = (int)(360 * scale);
+	int hi = (int)(2000 * scale);
+	while (lo < hi)
 	{
-		UpdateFormulaText();
-		contentH = LayoutGatePage(measureArea, scale);
+		const int mid = (lo + hi + 1) / 2;
+		if (outerHForClient(mid) <= maxOuterH)
+			lo = mid;
+		else
+			hi = mid - 1;
 	}
-	else if (page == 1)
-		contentH = LayoutBadPixelPage(measureArea, scale);
-	else
-		contentH = LayoutFirmwarePage(measureArea, scale);
+	return lo;
+}
 
-	const int chromeH = margin + tabH + margin + margin + btnH + margin;
-	int wantClientH = contentH + chromeH + (int)(8 * scale);
-	const int maxClientH = (int)(wr.Height() * 0.94);
-	if (wantClientH > maxClientH)
-		wantClientH = maxClientH;
-	if (wantClientH < (int)(480 * scale))
-		wantClientH = (int)(480 * scale);
+void CDtSpecDlg::PlaceSpecTabAndButtons(const CRect& cr)
+{
+	const int btnGap = (int)(12 * m_specLayoutScale);
+	const int btnMargin = max((int)(10 * m_specLayoutScale), m_specMargin / 2);
+	int btnTop = cr.bottom - m_specBtnH - btnMargin;
+	const int minBtnTop = m_specMargin + m_specTabH + m_specMargin;
+	if (btnTop < minBtnTop)
+		btnTop = minBtnTop;
 
-	CRect wantClient(0, 0, wantW, wantClientH);
-	AdjustWindowRectEx(&wantClient, style, FALSE, exStyle);
-
-	const int winW = wantClient.Width();
-	const int winH = wantClient.Height();
-	int posX = wr.left + (wr.Width() - winW) / 2;
-	int posY = wr.top + (wr.Height() - winH) / 2;
-	if (posY < wr.top)
-		posY = wr.top;
-
-	SetWindowPos(NULL, posX, posY, winW, winH, SWP_NOZORDER);
-
-	CRect cr;
-	GetClientRect(&cr);
-
-	const int yBtn = cr.bottom - margin - btnH;
-	const int contentBottom = yBtn - margin;
-	const int contentTop = margin + tabH + margin;
-	const CRect contentArea(margin, contentTop, cr.right - margin, contentBottom);
+	const int okLeft = cr.right - m_specMargin - m_specBtnW - btnGap - m_specBtnW;
+	const int cancelLeft = cr.right - m_specMargin - m_specBtnW;
+	const CRect okRc(okLeft, btnTop, okLeft + m_specBtnW, btnTop + m_specBtnH);
+	const CRect cancelRc(cancelLeft, btnTop, cancelLeft + m_specBtnW, btnTop + m_specBtnH);
 
 	if (CWnd* pTab = GetDlgItem(IDC_TAB_SPEC))
-		pTab->SetWindowPos(NULL, margin, margin, cr.Width() - margin * 2, tabH, SWP_NOZORDER);
+		pTab->SetWindowPos(NULL, m_specMargin, m_specMargin, cr.Width() - m_specMargin * 2, m_specTabH, SWP_NOZORDER);
 
 	if (CWnd* pOk = GetDlgItem(IDOK))
 	{
 		pOk->SetWindowText(ZH_UTF8(kSpecOk));
-		pOk->SetWindowPos(&CWnd::wndTop, cr.right - margin - btnW - btnGap - btnW, yBtn, btnW, btnH, SWP_SHOWWINDOW);
+		pOk->EnableWindow(TRUE);
+		MoveWnd(pOk, okRc);
+		pOk->ShowWindow(SW_SHOW);
 	}
 	if (CWnd* pCancel = GetDlgItem(IDCANCEL))
 	{
 		pCancel->SetWindowText(ZH_UTF8(kSpecCancel));
-		pCancel->SetWindowPos(&CWnd::wndTop, cr.right - margin - btnW, yBtn, btnW, btnH, SWP_SHOWWINDOW);
+		pCancel->EnableWindow(TRUE);
+		MoveWnd(pCancel, cancelRc);
+		pCancel->ShowWindow(SW_SHOW);
 	}
 
+	RaiseSpecDialogButtons();
+}
+
+void CDtSpecDlg::RaiseSpecDialogButtons()
+{
+	const UINT kBtnIds[] = { IDOK, IDCANCEL };
+	for (int i = 0; i < 2; i++)
+	{
+		if (CWnd* pBtn = GetDlgItem(kBtnIds[i]))
+		{
+			if (::IsWindow(pBtn->m_hWnd))
+				pBtn->SetWindowPos(&CWnd::wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+		}
+	}
+}
+
+int CDtSpecDlg::MeasureMaxPageHeight(const CRect& viewport, double scale)
+{
+	const int savedPage = m_specActivePage;
+	int maxH = 0;
+	for (int p = 0; p < 3; p++)
+	{
+		m_specActivePage = p;
+		int h = 0;
+		if (p == 0)
+		{
+			UpdateFormulaText();
+			h = LayoutGatePage(viewport, scale, false);
+		}
+		else if (p == 1)
+			h = LayoutBadPixelPage(viewport, scale, false);
+		else
+			h = LayoutFirmwarePage(viewport, scale, false);
+		if (h > maxH)
+			maxH = h;
+	}
+	m_specActivePage = savedPage;
+	return maxH;
+}
+
+void CDtSpecDlg::InitSpecDialogFrame(bool force)
+{
+	const double scale = GetSpecUiScale();
+	if (!force && m_specFrameReady && fabs(scale - m_specLayoutScale) < 0.01)
+		return;
+
+	m_specLayoutScale = scale;
+	m_specMargin = (int)(16 * scale);
+	m_specTabH = (int)(32 * scale);
+	m_specBtnH = SpecButtonHeight(this, m_fontBody, scale);
+	m_specBtnW = (int)(100 * scale);
+	m_specBtnBandH = m_specBtnH + (int)(28 * scale);
+
+	CRect wr;
+	SystemParametersInfo(SPI_GETWORKAREA, 0, &wr, 0);
+
+	const int wantW = min((int)(720 * scale), wr.Width() - (int)(32 * scale));
+	const int contentWidth = max(wantW - m_specMargin * 2, (int)(500 * scale));
+	const CRect measureArea(0, 0, contentWidth, 20000);
+
+	HideAllSpecPageControls();
+	const int contentH = MeasureMaxPageHeight(measureArea, scale);
 	HideAllSpecPageControls();
 
+	const int chromeH = m_specMargin + m_specTabH + m_specMargin + m_specBtnBandH;
+	int wantClientH = contentH + chromeH + (int)(12 * scale);
+	const int minClientH = m_specBtnBandH + m_specTabH + m_specMargin * 3 + (int)(220 * scale);
+	if (wantClientH < minClientH)
+		wantClientH = minClientH;
+
+	const int maxClientH = MaxClientHeightForWorkArea(wantW, wr, scale);
+	if (wantClientH > maxClientH)
+		wantClientH = maxClientH;
+
+	ResizeSpecClient(wantW, wantClientH);
+
+	CRect wrWin;
+	GetWindowRect(&wrWin);
+	const int posX = wr.left + (wr.Width() - wrWin.Width()) / 2;
+	const int posY = wr.top + (wr.Height() - wrWin.Height()) / 2;
+	SetWindowPos(NULL, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	ClampSpecDialogToWorkArea(wr);
+
+	CRect cr;
+	GetClientRect(&cr);
+	PlaceSpecTabAndButtons(cr);
+
+	const BOOL needScroll = (contentH + chromeH > wantClientH + (int)(4 * scale));
+	if (needScroll)
+	{
+		ModifyStyle(0, WS_VSCROLL);
+		ShowScrollBar(SB_VERT, TRUE);
+	}
+	else
+	{
+		ModifyStyle(WS_VSCROLL, 0);
+		ShowScrollBar(SB_VERT, FALSE);
+	}
+
+	m_specFrameReady = true;
+}
+
+void CDtSpecDlg::RelayoutSpecPage()
+{
+	if (!m_specFrameReady)
+		InitSpecDialogFrame(false);
+
+	const double scale = m_specLayoutScale;
+	const int page = m_specActivePage;
+
+	CRect cr;
+	GetClientRect(&cr);
+
+	const int contentTop = m_specMargin + m_specTabH + m_specMargin;
+	const int contentBottom = cr.bottom - m_specBtnBandH;
+	const CRect contentArea(m_specMargin, contentTop, cr.right - m_specMargin,
+		max(contentBottom, contentTop + (int)(160 * scale)));
+
+	HideAllSpecPageControls();
 	if (page == 0)
 	{
 		UpdateFormulaText();
-		LayoutGatePage(contentArea, scale);
+		LayoutGatePage(contentArea, scale, true);
 	}
 	else if (page == 1)
-		LayoutBadPixelPage(contentArea, scale);
+		LayoutBadPixelPage(contentArea, scale, true);
 	else
-		LayoutFirmwarePage(contentArea, scale);
+		LayoutFirmwarePage(contentArea, scale, true);
 
 	if (page != 0)
 		HideGatePageControls();
@@ -791,36 +970,58 @@ void CDtSpecDlg::LayoutSpecDialog()
 	if (page != 2)
 		HideFirmwarePageControls();
 
-	if (CWnd* pTab = GetDlgItem(IDC_TAB_SPEC))
-		pTab->SetWindowPos(&CWnd::wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-	if (CWnd* pOk = GetDlgItem(IDOK))
-		pOk->SetWindowPos(&CWnd::wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-	if (CWnd* pCancel = GetDlgItem(IDCANCEL))
-		pCancel->SetWindowPos(&CWnd::wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+	AdjustSpecPageZOrder();
+}
 
-	ShowScrollBar(SB_VERT, FALSE);
-	Invalidate(TRUE);
+static void SpecPushWndToBack(CWnd* pWnd)
+{
+	if (pWnd != NULL && ::IsWindow(pWnd->m_hWnd))
+		pWnd->SetWindowPos(&CWnd::wndBottom, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+void CDtSpecDlg::AdjustSpecPageZOrder()
+{
+	CButton* groups[] = {
+		&m_grpTiming, &m_grpLimits, &m_grpTempI2c, &m_grpBadPixel,
+		&m_grpBpHuawei, &m_grpBpNeighbor, &m_grpBpSnapFiles, &m_grpFirmware,
+	};
+	for (int i = 0; i < (int)(sizeof(groups) / sizeof(groups[0])); i++)
+		SpecPushWndToBack(groups[i]);
+
+	RaiseSpecDialogButtons();
+}
+
+static void EnsureStandardButtonStyle(CWnd* pWnd, bool radio)
+{
+	if (pWnd == NULL || !::IsWindow(pWnd->m_hWnd))
+		return;
+	pWnd->ModifyStyle(BS_OWNERDRAW, 0);
+	if (radio)
+		pWnd->ModifyStyle(0, WS_TABSTOP);
+	else
+		pWnd->ModifyStyle(0, BS_AUTOCHECKBOX | WS_TABSTOP);
+}
+
+void CDtSpecDlg::EnsureStandardCheckAndRadioButtons()
+{
+	const UINT chkIds[] = {
+		IDC_CHK_SPEC_TEMP_EN, IDC_CHK_SPEC_BP_EN, IDC_CHK_SPEC_BP_GRGBTOG,
+		IDC_CHK_SPEC_BP_SAVE, IDC_CHK_SPEC_BP_SAVE_BMP, IDC_CHK_SPEC_BP_SAVE_PACKED,
+		IDC_CHK_SPEC_BP_SAVE_U12, IDC_CHK_SPEC_BP_SAVE_U10, IDC_CHK_SPEC_FW_EN,
+	};
+	for (int i = 0; i < (int)(sizeof(chkIds) / sizeof(chkIds[0])); i++)
+		EnsureStandardButtonStyle(GetDlgItem(chkIds[i]), false);
+
+	const UINT radIds[] = { IDC_RAD_BP_ALGO_NEIGHBOR, IDC_RAD_BP_ALGO_HUAWEI };
+	for (int i = 0; i < (int)(sizeof(radIds) / sizeof(radIds[0])); i++)
+		EnsureStandardButtonStyle(GetDlgItem(radIds[i]), true);
 }
 
 void CDtSpecDlg::ApplyDialogFonts()
 {
-	CClientDC dc(this);
-	const int dpiY = dc.GetDeviceCaps(LOGPIXELSY);
-	const int hTitle = -MulDiv(9, dpiY, 72);
-	const int hBody = -MulDiv(8, dpiY, 72);
-	const int hSmall = -MulDiv(8, dpiY, 72);
-	if (!m_fontTitle.GetSafeHandle())
-		m_fontTitle.CreateFont(hTitle, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-			DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-			DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Microsoft YaHei UI"));
-	if (!m_fontBody.GetSafeHandle())
-		m_fontBody.CreateFont(hBody, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-			DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-			DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Microsoft YaHei UI"));
-	if (!m_fontSmall.GetSafeHandle())
-		m_fontSmall.CreateFont(hSmall, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-			DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-			DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Microsoft YaHei UI"));
+	DtCreateUiFont(m_fontTitle, 10, true, m_hWnd);
+	DtCreateUiFont(m_fontBody, 9, false, m_hWnd);
+	DtCreateUiFont(m_fontSmall, 8, false, m_hWnd);
 
 	m_tab.SetFont(&m_fontBody);
 	m_stTitle.SetFont(&m_fontTitle);
@@ -911,8 +1112,32 @@ void CDtSpecDlg::ShowSpecPage(int page)
 	if (page > 2)
 		page = 2;
 	m_specActivePage = page;
-	HideAllSpecPageControls();
-	LayoutSpecDialog();
+	if (m_pFn != NULL)
+		m_firmware = m_pFn->m_gateFirmwareBurn;
+
+	RelayoutSpecPage();
+
+	if (page == 2 && m_pFn != NULL)
+	{
+		m_chkFwEn.SetCheck(m_firmware.enabled ? BST_CHECKED : BST_UNCHECKED);
+		m_chkFwEn.EnableWindow(TRUE);
+	}
+}
+
+LRESULT CDtSpecDlg::OnDpiChanged(WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+	if (m_fontBody.GetSafeHandle())
+	{
+		m_fontTitle.DeleteObject();
+		m_fontBody.DeleteObject();
+		m_fontSmall.DeleteObject();
+	}
+	m_specFrameReady = false;
+	ApplyDialogFonts();
+	EnsureStandardCheckAndRadioButtons();
+	InitSpecDialogFrame(true);
+	RelayoutSpecPage();
+	return 0;
 }
 
 void CDtSpecDlg::OnTcnSelchangeTabSpec(NMHDR* /*pNMHDR*/, LRESULT* pResult)
@@ -924,10 +1149,7 @@ void CDtSpecDlg::OnTcnSelchangeTabSpec(NMHDR* /*pNMHDR*/, LRESULT* pResult)
 		if (sel == 0)
 			UpdateFormulaText();
 		else if (sel == 1)
-		{
-			UpdateBadPixelAlgoUi();
 			UpdateBadPixelSnapTypeUi();
-		}
 		else if (sel == 2)
 			UpdateFirmwarePathLabel();
 	}
@@ -992,6 +1214,7 @@ BOOL CDtSpecDlg::OnInitDialog()
 	SetWindowText(ZH_UTF8(kSpecTitle));
 
 	ApplyDialogFonts();
+	EnsureStandardCheckAndRadioButtons();
 	m_stHint.ModifyStyle(SS_SIMPLE, 0);
 	m_stBpHint.ModifyStyle(SS_SIMPLE, 0);
 	m_stFwHint.ModifyStyle(SS_SIMPLE, 0);
@@ -1164,6 +1387,7 @@ BOOL CDtSpecDlg::OnInitDialog()
 
 	UpdateFormulaText();
 	m_tab.SetCurSel(0);
+	m_specFrameReady = false;
 	ShowSpecPage(0);
 	UpdateBadPixelAlgoUi();
 	UpdateBadPixelSnapTypeUi();
@@ -1359,6 +1583,13 @@ void CDtSpecDlg::FillFirmwareFovCombo()
 	m_cmbFwFov.SetCurSel(sel);
 }
 
+void CDtSpecDlg::OnBnClickedChkFwEn()
+{
+	if (m_specActivePage != 2)
+		return;
+	m_firmware.enabled = (m_chkFwEn.GetCheck() == BST_CHECKED);
+}
+
 void CDtSpecDlg::OnCbnSelchangeFwFov()
 {
 	UpdateFirmwarePathLabel();
@@ -1395,12 +1626,9 @@ void CDtSpecDlg::OnBnClickedBpSave()
 	UpdateBadPixelSnapTypeUi();
 }
 
-void CDtSpecDlg::UpdateBadPixelAlgoUi()
+void CDtSpecDlg::UpdateBadPixelLabels()
 {
-	if (m_tab.GetSafeHwnd() == NULL || m_tab.GetCurSel() != 1)
-		return;
-
-	const BOOL huawei = (m_radBpHuawei.GetCheck() == BST_CHECKED);
+	const BOOL huawei = (::IsWindow(m_radBpHuawei.m_hWnd) && m_radBpHuawei.GetCheck() == BST_CHECKED);
 	if (huawei)
 	{
 		m_lblBpMax.SetWindowText(ZH_UTF8(kSpecBpMaxCl));
@@ -1413,8 +1641,16 @@ void CDtSpecDlg::UpdateBadPixelAlgoUi()
 		m_lblBpHotDelta.SetWindowText(ZH_UTF8(kSpecBpHotDeltaNb));
 		m_stBpHint.SetWindowText(ZH_UI(kSpecBpHintNb));
 	}
+}
 
-	LayoutSpecDialog();
+void CDtSpecDlg::UpdateBadPixelAlgoUi()
+{
+	if (m_tab.GetSafeHwnd() == NULL || m_tab.GetCurSel() != 1)
+		return;
+
+	UpdateBadPixelLabels();
+	RelayoutSpecPage();
+	UpdateBadPixelSnapTypeUi();
 }
 
 void CDtSpecDlg::OnBnClickedRadBpAlgo()

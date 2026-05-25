@@ -521,7 +521,8 @@ void CDtSampleDlg::OnBnClickedButtonOpen()
 {
 	if (!m_bOpen)
 	{
-		m_dtFunction.Open();
+		if (!m_dtFunction.Open())
+			return;
 		m_bOpen = TRUE;
 		m_bPreviewFrozen = FALSE;
 		ReSize();
@@ -803,6 +804,14 @@ void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 		m_dtFunction.Stop();
 		m_bStart = FALSE;
 	}
+	if (!forFwPowerCycle)
+	{
+		if (m_btnStart.GetSafeHwnd())
+			m_btnStart.SetWindowText(_T("Start"));
+		else if (GetDlgItem(IDC_BUTTON_START))
+			GetDlgItem(IDC_BUTTON_START)->SetWindowText(_T("Start"));
+		UpdatePrimaryButtonLooks();
+	}
 }
 
 void CDtSampleDlg::ContinueAfterFirmwareBurn(bool burnOk)
@@ -822,10 +831,34 @@ void CDtSampleDlg::ContinueAfterFirmwareBurn(bool burnOk)
 		SetTimer(TIMER_ID_FW_POWER_OFF, 2000, NULL);
 		return;
 	}
+	/* Verify runs only after power-cycle + settle (Ruibo: Stop 2s, Start 3s, then ReadFlashCalibrationResult). */
+	if (m_dtFunction.m_gateFirmwareBurn.verifyEnabled)
+		msgUtf8(DtZh::kFwVerifyNeedPowerCycle);
 	int delay = m_dtFunction.m_gateFirmwareBurn.postBurnDelayMs;
 	if (delay < 200)
 		delay = 1000;
 	SetTimer(TIMER_ID_STREAM_GATE, delay, NULL);
+}
+
+bool CDtSampleDlg::RunFirmwareBurnVerifyOrStop()
+{
+	const GateFirmwareBurnCfg& fw = m_dtFunction.m_gateFirmwareBurn;
+	if (!fw.enabled || !fw.verifyEnabled)
+		return true;
+	m_dtFunction.ReadGateSpecIni();
+	msgUtf8(DtZh::kFwVerifyStart);
+	const bool ok = m_dtFunction.RunFirmwareBurnVerifyAll();
+	if (!ok)
+	{
+		msgUtf8(DtZh::kFwVerifyFail);
+		if (AnyFirmwareBurnChannelFailed())
+			PaintPreviewCellsBurnResult();
+		if (m_bStart)
+			StopCaptureAndShowResults(FALSE);
+		return false;
+	}
+	msgUtf8(DtZh::kFwVerifyOk);
+	return true;
 }
 
 LRESULT CDtSampleDlg::OnFwBurnDone(WPARAM wParam, LPARAM lParam)
@@ -837,15 +870,21 @@ LRESULT CDtSampleDlg::OnFwBurnDone(WPARAM wParam, LPARAM lParam)
 	if (gen == m_fwBurnHandledGen)
 		return 0;
 	m_fwBurnHandledGen = gen;
+
+	const bool burnOk = (wParam != 0);
+	if (!burnOk)
+	{
+		if (AnyFirmwareBurnChannelFailed())
+			PaintPreviewCellsBurnResult();
+		ContinueAfterFirmwareBurn(false);
+		return 0;
+	}
+
 	if (!m_bStart && !m_bFwPowerCyclePending)
 		return 0;
 
-	if (wParam != 0)
-		ClearFwBurnCellOverlay(false);
-	else if (AnyFirmwareBurnChannelFailed())
-		PaintPreviewCellsBurnResult();
-
-	ContinueAfterFirmwareBurn(wParam != 0);
+	ClearFwBurnCellOverlay(false);
+	ContinueAfterFirmwareBurn(true);
 	return 0;
 }
 
@@ -1168,6 +1207,8 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 	{
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
 		if (!m_bStart)
+			return;
+		if (!RunFirmwareBurnVerifyOrStop())
 			return;
 		int delay = m_dtFunction.m_gateFirmwareBurn.postBurnDelayMs;
 		if (delay < 200)

@@ -20,6 +20,7 @@ protected:
 	afx_msg void OnBnClickedBtnBpBrowse();
 	afx_msg void OnBnClickedBpSave();
 	afx_msg void OnBnClickedRadBpAlgo();
+	afx_msg void OnBnClickedChkFwEn();
 
 	DECLARE_MESSAGE_MAP()
 
@@ -116,23 +117,42 @@ protected:
 	GateFirmwareBurnCfg m_firmware;
 
 	int m_specActivePage;
+	bool m_specFrameReady;
+	double m_specLayoutScale;
+	int m_specMargin;
+	int m_specTabH;
+	int m_specBtnBandH;
+	int m_specBtnH;
+	int m_specBtnW;
 
 	void ApplyDialogFonts();
+	void EnsureStandardCheckAndRadioButtons();
+	void ResizeSpecClient(int clientW, int clientH);
+	void ClampSpecDialogToWorkArea(const CRect& workArea);
+	int MaxClientHeightForWorkArea(int clientW, const CRect& workArea, double scale) const;
+	void PlaceSpecTabAndButtons(const CRect& cr);
 	void ShowSpecPage(int page);
 	void UpdateFormulaText();
-	/** Resize dialog for DPI/screen and lay out the active tab. */
-	void LayoutSpecDialog();
+	/** Once per open/DPI: size dialog, tab strip, OK/Cancel. */
+	void InitSpecDialogFrame(bool force);
+	/** Tab switch: layout active page only (no resize). */
+	void RelayoutSpecPage();
+	void AdjustSpecPageZOrder();
+	void RaiseSpecDialogButtons();
 	void HideGatePageControls();
 	void HideBadPixelPageControls();
 	void HideFirmwarePageControls();
 	void HideAllSpecPageControls();
 	double GetSpecUiScale() const;
-	int LayoutGatePage(const CRect& viewport, double scale);
-	int LayoutBadPixelPage(const CRect& viewport, double scale);
-	int LayoutFirmwarePage(const CRect& viewport, double scale);
+	int MeasureMaxPageHeight(const CRect& viewport, double scale);
+	int LayoutGatePage(const CRect& viewport, double scale, bool bShow);
+	int LayoutBadPixelPage(const CRect& viewport, double scale, bool bShow);
+	int LayoutFirmwarePage(const CRect& viewport, double scale, bool bShow);
 	void FillFirmwareFovCombo();
 	void UpdateFirmwarePathLabel();
 	afx_msg void OnCbnSelchangeFwFov();
+	afx_msg LRESULT OnDpiChanged(WPARAM wParam, LPARAM lParam);
+	void UpdateBadPixelLabels();
 	void UpdateBadPixelAlgoUi();
 	void UpdateBadPixelSnapTypeUi();
 };

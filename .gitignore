@@ -1,0 +1,48 @@
+# Visual Studio / MFC
+.vs/
+ipch/
+*.sdf
+*.suo
+*.opensdf
+*.user
+*.aps
+*.ncb
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+
+# Build outputs
+x64/
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+*.obj
+*.pch
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.lib
+*.exe
+*.dll
+*.tlog
+*.lastbuildstate
+*.log
+*.res
+*.iobj
+*.ipdb
+FileListAbsolute.txt
+*.Build.CppClean.log
+
+# Local runtime / test data
+测试数据/
+log/
+*.ini.bak
+
+# Cursor
+.cursor/
+
+# OS
+Thumbs.db
+Desktop.ini

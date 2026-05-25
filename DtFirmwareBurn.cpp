@@ -363,3 +363,134 @@ bool Sony031FlashProgram(
 	msgUtf8(DtZh::kFwOk, devId, vcId);
 	return true;
 }
+
+namespace {
+
+#define FW_VERIFY_REG_COUNT 14
+
+/* Expected bytes for kVerifyReadRegs[] order (Ruibo ReadFlashCalibrationResult, latest). */
+static const unsigned char kExpectRabob065200[FW_VERIFY_REG_COUNT] = {
+	0x14, 0xA0, 0x19, 0x20, 0x14, 0x41, 0xA1, 0x00, 0x20, 0x26, 0x04, 0x28, 0x15, 0x50
+};
+static const unsigned char kExpectRabom826200[FW_VERIFY_REG_COUNT] = {
+	0x13, 0xA0, 0x19, 0x20, 0x14, 0x41, 0x01, 0x00, 0x20, 0x26, 0x04, 0x01, 0x10, 0x09
+};
+static const unsigned char kExpectRabom826100[FW_VERIFY_REG_COUNT] = {
+	0x13, 0xB0, 0x19, 0x20, 0x10, 0x81, 0x01, 0x00, 0x20, 0x26, 0x04, 0x01, 0x09, 0x42
+};
+/* No separate table in Ruibo; same as RABOM82660 until product defines otherwise. */
+static const unsigned char kExpectRabom82660Flip[FW_VERIFY_REG_COUNT] = {
+	0x13, 0xD0, 0x19, 0x20, 0x10, 0x81, 0x01, 0x00, 0x20, 0x26, 0x03, 0x31, 0x19, 0x34
+};
+static const unsigned char kExpectRabom82660[FW_VERIFY_REG_COUNT] = {
+	0x13, 0xD0, 0x19, 0x20, 0x10, 0x81, 0x01, 0x00, 0x20, 0x26, 0x03, 0x31, 0x19, 0x34
+};
+
+static const unsigned short kVerifyReadRegs[FW_VERIFY_REG_COUNT] = {
+	0xC3FC, 0xC400, 0xC407, 0xC406, 0xC405, 0xC404,
+	0xC408, 0xC40C, 0xC413, 0xC412, 0xC411, 0xC410, 0xC415, 0xC414
+};
+
+/** Index matches kFirmwareFovTypes[] (FIRMWARE_FOV_TYPE_COUNT). */
+static const unsigned char* VerifyExpectForFov(int fovTypeIndex)
+{
+	switch (fovTypeIndex)
+	{
+	case 0: return kExpectRabob065200;      /* RABOB065200 */
+	case 1: return kExpectRabom826200;      /* RABOM826200 */
+	case 2: return kExpectRabom826100;      /* RABOM826100 */
+	case 3: return kExpectRabom82660Flip;   /* RABOM82660Flip */
+	case 4: return kExpectRabom82660;       /* RABOM82660 */
+	default: return NULL;
+	}
+}
+
+static CStringA VerifyFovLabelA(int fovTypeIndex)
+{
+	return CStringA(CT2A(FirmwareFovTypeName(fovTypeIndex)));
+}
+
+} // namespace
+
+bool Sony031VerifyFlashCalibration(
+	int devId,
+	int vcId,
+	int fovTypeIndex,
+	const GateFirmwareBurnCfg& cfg,
+	unsigned char slaveHint,
+	Sony031VerifyResult* outResult)
+{
+	Sony031VerifyResult local = {};
+	if (outResult == NULL)
+		outResult = &local;
+	memset(outResult, 0, sizeof(*outResult));
+
+	if (fovTypeIndex < 0 || fovTypeIndex >= FIRMWARE_FOV_TYPE_COUNT)
+		fovTypeIndex = FIRMWARE_FOV_DEFAULT_INDEX;
+
+	const unsigned char* expect = VerifyExpectForFov(fovTypeIndex);
+	if (expect == NULL)
+	{
+		msg("[FirmwareVerify] unsupported FovType %s (index=%d)\r\n",
+			(LPCSTR)VerifyFovLabelA(fovTypeIndex), fovTypeIndex);
+		return false;
+	}
+
+	if (cfg.useMipiVcForBurn)
+	{
+		if (!SelectMipiVc(devId, vcId))
+		{
+			msg("[FirmwareVerify] SetMipiImageVC failed dev=%d vc=%d\r\n", devId, vcId);
+			return false;
+		}
+	}
+
+	unsigned char slave = 0;
+	if (!ResolveFlashSlave(devId, vcId, slaveHint, cfg.autoDetectSlave, &slave))
+	{
+		msgUtf8(DtZh::kFwSlaveDetectFail, devId, vcId);
+		return false;
+	}
+	msgUtf8(DtZh::kFwVerifyVc, devId, vcId, (unsigned)slave, (LPCSTR)VerifyFovLabelA(fovTypeIndex), devId);
+
+	for (int i = 0; i < FW_VERIFY_REG_COUNT; i++)
+	{
+		unsigned short v = 0;
+		if (ReadReg16(devId, slave, kVerifyReadRegs[i], &v) != 1)
+		{
+			msg("[FirmwareVerify] read fail dev=%d vc=%d reg=0x%04X slave=0x%02X\r\n",
+				devId, vcId, kVerifyReadRegs[i], (unsigned)slave);
+			return false;
+		}
+		outResult->values[i] = v;
+	}
+
+	msg("[FirmwareVerify] regs dev=%d vc=%d %s: C3FC=%02X C400=%02X C407=%02X C406=%02X C405=%02X C404=%02X "
+		"C408=%02X C40C=%02X C413=%02X C412=%02X C411=%02X C410=%02X C415=%02X C414=%02X slave=0x%02X\r\n",
+		devId, vcId, (LPCSTR)VerifyFovLabelA(fovTypeIndex),
+		outResult->values[0], outResult->values[1], outResult->values[2], outResult->values[3],
+		outResult->values[4], outResult->values[5], outResult->values[6], outResult->values[7],
+		outResult->values[8], outResult->values[9], outResult->values[10], outResult->values[11],
+		outResult->values[12], outResult->values[13], (unsigned)slave);
+
+	for (int i = 0; i < FW_VERIFY_REG_COUNT; i++)
+	{
+		const unsigned char actual = (unsigned char)(outResult->values[i] & 0xff);
+		if (actual != expect[i])
+		{
+			outResult->success = false;
+			outResult->failIndex = i;
+			outResult->expected = expect[i];
+			outResult->actual = actual;
+			msg("[FirmwareVerify] NG dev=%d vc=%d %s reg=0x%04X expect=0x%02X read=0x%02X slave=0x%02X\r\n",
+				devId, vcId, (LPCSTR)VerifyFovLabelA(fovTypeIndex), kVerifyReadRegs[i],
+				expect[i], actual, (unsigned)slave);
+			return false;
+		}
+	}
+
+	outResult->success = true;
+	msg("[FirmwareVerify] OK dev=%d vc=%d %s (all 14 regs match)\r\n",
+		devId, vcId, (LPCSTR)VerifyFovLabelA(fovTypeIndex));
+	return true;
+}

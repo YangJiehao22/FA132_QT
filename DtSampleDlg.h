@@ -100,6 +100,7 @@ public:
 	void WaitForFwBurnThread(DWORD timeoutMs);
 	void BeginFirmwareBurnAsync();
 	void ContinueAfterFirmwareBurn(bool burnOk);
+	bool RunFirmwareBurnVerifyOrStop();
 	void StopCaptureForFirmwarePowerCycle();
 	void StopCaptureAndShowResults(bool forFwPowerCycle);
 	afx_msg LRESULT OnFwBurnDone(WPARAM wParam, LPARAM lParam);
