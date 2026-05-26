@@ -793,12 +793,14 @@ void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 	{
 		++m_fwBurnGeneration;
 		m_bFwPowerCyclePending = FALSE;
-		if (!AnyFirmwareBurnChannelFailed())
+		if (!m_dtFunction.m_bLightGateHasResult && !AnyFirmwareBurnChannelFailed())
 			m_dtFunction.ClearFirmwareBurnUiState();
 		KillTimer(TIMER_ID_FW_POWER_OFF);
 		KillTimer(TIMER_ID_STREAM_GATE);
 		m_bPreviewFrozen = TRUE;
-		if (AnyFirmwareBurnChannelFailed())
+		if (m_dtFunction.m_bLightGateHasResult)
+			PaintPreviewCellsTestResult();
+		else if (AnyFirmwareBurnChannelFailed())
 			PaintPreviewCellsBurnResult();
 		else
 			PaintPreviewCellsTestResult();
@@ -830,7 +832,8 @@ void CDtSampleDlg::ContinueAfterFirmwareBurn(bool burnOk)
 {
 	if (!burnOk)
 	{
-		msgUtf8(DtZh::kFwParallelFail);
+		m_dtFunction.FinalizeProductionRun(PROD_STAGE_BURN);
+		SetWindowText(ZH_UTF8(kMainTitleTestNg));
 		if (m_bStart)
 			StopCaptureAndShowResults(FALSE);
 		return;
@@ -863,8 +866,8 @@ bool CDtSampleDlg::RunFirmwareBurnVerifyOrStop()
 	if (!ok)
 	{
 		msgUtf8(DtZh::kFwVerifyFail);
-		if (AnyFirmwareBurnChannelFailed())
-			PaintPreviewCellsBurnResult();
+		m_dtFunction.FinalizeProductionRun(PROD_STAGE_VERIFY);
+		SetWindowText(ZH_UTF8(kMainTitleTestNg));
 		if (m_bStart)
 			StopCaptureAndShowResults(FALSE);
 		return false;
@@ -886,8 +889,6 @@ LRESULT CDtSampleDlg::OnFwBurnDone(WPARAM wParam, LPARAM lParam)
 	const bool burnOk = (wParam != 0);
 	if (!burnOk)
 	{
-		if (AnyFirmwareBurnChannelFailed())
-			PaintPreviewCellsBurnResult();
 		ContinueAfterFirmwareBurn(false);
 		return 0;
 	}
@@ -1243,6 +1244,7 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 			msgUtf8(DtZh::kLogLtNg);
 			SetWindowText(ZH_UTF8(kMainTitleTestNg));
 		}
+		/* FinalizeProductionRun (CSV + preview NG/OK) already ran inside RunLightGatePerChannelReport. */
 		StopCaptureAndShowResults(FALSE);
 		if (m_btnStart.GetSafeHwnd())
 			m_btnStart.SetWindowText(_T("Start"));

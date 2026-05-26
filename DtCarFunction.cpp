@@ -1669,6 +1669,7 @@ DtCarFunction::DtCarFunction()
 	m_bPauseCaptureForBurn = false;
 	m_bSuppressWorkDraw = false;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
+	memset(m_fwBurnErrCode, 0, sizeof(m_fwBurnErrCode));
 	m_bFirmwareBurnVerifyHasResult = false;
 	memset(m_bFirmwareBurnVerifyPass, 0, sizeof(m_bFirmwareBurnVerifyPass));
 	m_hwndFirmwareBurnProgress = NULL;
@@ -2420,6 +2421,7 @@ void DtCarFunction::ClearLightGateResults()
 	m_bFirmwareBurnHasResult = false;
 	m_bFirmwareBurnInProgress = false;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
+	memset(m_fwBurnErrCode, 0, sizeof(m_fwBurnErrCode));
 	m_bFirmwareBurnVerifyHasResult = false;
 	memset(m_bFirmwareBurnVerifyPass, 0, sizeof(m_bFirmwareBurnVerifyPass));
 }
@@ -2444,6 +2446,7 @@ unsigned __stdcall DtCarFunction::FirmwareBurnThreadProc(void* p)
 	Sony031BurnResult br = {};
 	const bool ok = Sony031FlashProgram(dev, vc, tp->cfg, tp->slaveHint, &br);
 	fn->m_bFirmwareBurnPass[dev][vc] = ok;
+	fn->m_fwBurnErrCode[dev][vc] = ok ? 0 : br.errorCode;
 	if (!ok)
 		msgUtf8(DtZh::kFwFail, dev, vc, br.errorCode);
 	delete tp;
@@ -2582,6 +2585,7 @@ static void MarkEnabledFirmwareBurnFailed(DtCarFunction* fn)
 			if (!fn->IsVcEnabled(d, v))
 				continue;
 			fn->m_bFirmwareBurnPass[d][v] = false;
+			fn->m_fwBurnErrCode[d][v] = 1;
 		}
 	}
 }
@@ -2616,6 +2620,7 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 	m_bFirmwareBurnHasResult = true;
 	m_bFirmwareBurnInProgress = true;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
+	memset(m_fwBurnErrCode, 0, sizeof(m_fwBurnErrCode));
 
 	FirmwareBurnSetProgressTarget(m_hwndFirmwareBurnProgress);
 
@@ -2893,7 +2898,7 @@ void DtCarFunction::UpdateGrayCacheFromGrab(int devId, int vcId, const DtImage_t
 		InterlockedExchange(&slot.pending, 0);
 }
 
-CString DtCarFunction::BuildLightTestOutputDir(const CTime& time) const
+CString DtCarFunction::BuildProductionOutputDir(const CTime& time) const
 {
 	CString base;
 	if (m_gateBadPixelDark.saveDir[0] != 0)
@@ -2919,23 +2924,141 @@ CString DtCarFunction::BuildLightTestOutputDir(const CTime& time) const
 	return dir;
 }
 
-void DtCarFunction::WriteLightTestReport(const std::vector<LightTestChannelRecord>& rows, bool allPass) const
+void DtCarFunction::EnsureProductionSessionDir()
+{
+	if (!m_lightTestSessionDir.IsEmpty())
+		return;
+	const CTime sessionTime = CTime::GetCurrentTime();
+	m_lightTestSessionDir = BuildProductionOutputDir(sessionTime);
+	m_lightTestSessionTag.Format(_T("%04d%02d%02d_%02d%02d%02d"),
+		sessionTime.GetYear(), sessionTime.GetMonth(), sessionTime.GetDay(),
+		sessionTime.GetHour(), sessionTime.GetMinute(), sessionTime.GetSecond());
+	::SHCreateDirectoryEx(NULL, m_lightTestSessionDir, NULL);
+}
+
+void DtCarFunction::WriteProductionReport(const std::vector<LightTestChannelRecord>& rows, bool allPass) const
 {
 	if (m_lightTestSessionDir.IsEmpty())
 		return;
 
-	CString csvPath = m_lightTestSessionDir + _T("LightTest_report.csv");
-	if (WriteLightTestReportCsv(csvPath, rows, allPass,
+	CString csvPath = m_lightTestSessionDir + _T("Production_report.csv");
+	if (WriteProductionReportCsv(csvPath, rows, allPass,
 		m_strGateSpecIniPath, m_specDelayMs, m_strSensorIniPath))
 	{
 		CStringA csvA(csvPath);
-		msgUtf8(DtZh::kLogLtCsvOk, csvA.GetString());
+		msgUtf8(DtZh::kLogProdCsvOk, csvA.GetString());
 	}
 	else
 	{
 		CStringA csvA(csvPath);
-		msgUtf8(DtZh::kLogLtCsvFail, csvA.GetString());
+		msgUtf8(DtZh::kLogProdCsvFail, csvA.GetString());
 	}
+}
+
+static void FillProductionFwFields(DtCarFunction* fn, int d, int v, LightTestChannelRecord& rec)
+{
+	if (fn == NULL)
+		return;
+	rec.fwBurnEnabled = fn->m_gateFirmwareBurn.enabled;
+	rec.fwBurnTested = fn->m_bFirmwareBurnHasResult;
+	rec.okFwBurn = !rec.fwBurnEnabled || !rec.fwBurnTested || fn->m_bFirmwareBurnPass[d][v];
+	rec.fwBurnErrCode = fn->m_fwBurnErrCode[d][v];
+	rec.fwVerifyEnabled = fn->m_gateFirmwareBurn.enabled && fn->m_gateFirmwareBurn.verifyEnabled;
+	rec.fwVerifyTested = fn->m_bFirmwareBurnVerifyHasResult;
+	rec.okFwVerify = !rec.fwVerifyEnabled || !rec.fwVerifyTested || fn->m_bFirmwareBurnVerifyPass[d][v];
+}
+
+void DtCarFunction::BuildProductionRowsFromFirmware(int failStage,
+	std::vector<LightTestChannelRecord>& outRows, bool& outAllPass) const
+{
+	outRows.clear();
+	outAllPass = true;
+	if (m_iEnumDevNum <= 0 || m_iVcNum <= 0)
+		return;
+
+	for (int d = 0; d < m_iEnumDevNum; d++)
+	{
+		if (!IsDevEnabled(d))
+			continue;
+		for (int v = 0; v < m_iVcNum; v++)
+		{
+			if (!IsVcEnabled(d, v))
+				continue;
+
+			LightTestChannelRecord rec = {};
+			rec.devId = d;
+			rec.vcId = v;
+			rec.measureSkipped = true;
+			FillProductionFwFields(const_cast<DtCarFunction*>(this), d, v, rec);
+
+			bool chPass = true;
+			if (rec.fwBurnEnabled && rec.fwBurnTested && !rec.okFwBurn)
+				chPass = false;
+			if (failStage == PROD_STAGE_VERIFY
+				&& rec.fwVerifyEnabled && rec.fwVerifyTested && !rec.okFwVerify)
+				chPass = false;
+
+			rec.overallPass = chPass;
+			rec.failStage = chPass ? PROD_STAGE_OK : failStage;
+			if (!chPass)
+				outAllPass = false;
+
+			outRows.push_back(rec);
+		}
+	}
+}
+
+void DtCarFunction::ApplyProductionRowsToUi(const std::vector<LightTestChannelRecord>& rows)
+{
+	m_bLightGateHasResult = (rows.size() > 0);
+	memset(m_bLightGatePass, 0, sizeof(m_bLightGatePass));
+	for (size_t i = 0; i < rows.size(); i++)
+	{
+		const int d = rows[i].devId;
+		const int v = rows[i].vcId;
+		if (d >= 0 && d < MAX_CC16 * MAX_DEV && v >= 0 && v < MAX_VC)
+			m_bLightGatePass[d][v] = rows[i].overallPass;
+	}
+}
+
+static const char* ProductionFailStageZh(int stage)
+{
+	switch (stage)
+	{
+	case PROD_STAGE_BURN: return DtZh::kProdStageBurn;
+	case PROD_STAGE_VERIFY: return DtZh::kProdStageVerify;
+	case PROD_STAGE_LIGHT: return DtZh::kProdStageLight;
+	default: return DtZh::kStrOk;
+	}
+}
+
+bool DtCarFunction::FinalizeProductionRun(int failStage)
+{
+	std::vector<LightTestChannelRecord> rows;
+	bool allPass = true;
+	BuildProductionRowsFromFirmware(failStage, rows, allPass);
+	return FinalizeProductionRun(failStage, rows, allPass);
+}
+
+bool DtCarFunction::FinalizeProductionRun(int failStage,
+	const std::vector<LightTestChannelRecord>& rows, bool allPass)
+{
+	EnsureProductionSessionDir();
+	ApplyProductionRowsToUi(rows);
+	WriteProductionReport(rows, allPass);
+
+	int summaryStage = failStage;
+	if (allPass)
+		summaryStage = PROD_STAGE_OK;
+	else if (summaryStage == PROD_STAGE_OK)
+		summaryStage = PROD_STAGE_LIGHT;
+
+	if (allPass)
+		msgUtf8(DtZh::kProdSummaryOk);
+	else
+		msgUtf8(DtZh::kProdSummaryNg, ProductionFailStageZh(summaryStage));
+
+	return allPass;
 }
 
 bool DtCarFunction::GrabFrameDirectOwned(int devId, int vcId,
@@ -3052,7 +3175,7 @@ void DtCarFunction::SaveBadPixelSnapshots(int devId, int vcId, bool pass,
 	if (dir.IsEmpty())
 	{
 		const CTime time = CTime::GetCurrentTime();
-		dir = BuildLightTestOutputDir(time);
+		dir = BuildProductionOutputDir(time);
 	}
 	::SHCreateDirectoryEx(NULL, dir, NULL);
 
@@ -3569,6 +3692,9 @@ static bool RunLightGateOneChannel(DtCarFunction* fn, int d, int v,
 	rec.frameMean = bpRes.frameMean;
 	rec.imageBmp = bmpPath;
 	rec.imageRawUnpacked = rawPath;
+	rec.measureSkipped = false;
+	rec.failStage = pass ? PROD_STAGE_OK : PROD_STAGE_LIGHT;
+	FillProductionFwFields(fn, d, v, rec);
 
 	const TCHAR* fwTag = _T("N/A");
 	if (fn->m_gateFirmwareBurn.enabled && fn->m_bFirmwareBurnHasResult)
@@ -3688,12 +3814,7 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 	m_bLightGateHasResult = true;
 	memset(m_bLightGatePass, 0, sizeof(m_bLightGatePass));
 
-	const CTime sessionTime = CTime::GetCurrentTime();
-	m_lightTestSessionDir = BuildLightTestOutputDir(sessionTime);
-	m_lightTestSessionTag.Format(_T("%04d%02d%02d_%02d%02d%02d"),
-		sessionTime.GetYear(), sessionTime.GetMonth(), sessionTime.GetDay(),
-		sessionTime.GetHour(), sessionTime.GetMinute(), sessionTime.GetSecond());
-	::SHCreateDirectoryEx(NULL, m_lightTestSessionDir, NULL);
+	EnsureProductionSessionDir();
 
 	std::vector<HANDLE> threads;
 	std::vector<DtLightGateThreadParam*> params;
@@ -3755,8 +3876,7 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 		delete tp;
 	}
 
-	WriteLightTestReport(reportRows, allPass);
-	msgUtf8(allPass ? DtZh::kLtSummaryPass : DtZh::kLtSummaryNg);
+	FinalizeProductionRun(PROD_STAGE_LIGHT, reportRows, allPass);
 	if (!allPass)
 		msgUtf8(DtZh::kLtParallelFail);
 	return allPass;

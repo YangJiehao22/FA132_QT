@@ -173,6 +173,9 @@ public:
 
 	/** Parallel light test per enabled Dev/VC (SsrFps/Cur/Temp/BadPx/Fw). */
 	bool RunLightGatePerChannelReport();
+	/** Unified UI + Production_report.csv for burn/verify abort or light-test completion. */
+	bool FinalizeProductionRun(int failStage);
+	bool FinalizeProductionRun(int failStage, const std::vector<LightTestChannelRecord>& rows, bool allPass);
 	/** Parallel Sony031 flash on enabled Dev/VC (same Dev: all VC threads in parallel).
 	    afterStart=false (UI): prep init only, no pause/join; power-cycle stays in DtSampleDlg.
 	    afterStart=true (legacy): capture threads running, PauseWorkThreads before burn. */
@@ -191,6 +194,7 @@ public:
 	bool m_bFirmwareBurnPass[MAX_CC16 * MAX_DEV][MAX_VC];
 	bool m_bFirmwareBurnVerifyHasResult;
 	bool m_bFirmwareBurnVerifyPass[MAX_CC16 * MAX_DEV][MAX_VC];
+	int m_fwBurnErrCode[MAX_CC16 * MAX_DEV][MAX_VC];
 	bool PauseWorkThreadsForFirmwareBurn();
 
 	/** Grab one frame and convert to 8-bit gray (thread-safe with WorkProc). */
@@ -239,8 +243,11 @@ protected:
 		CString* outBmpPath, CString* outRawUnpackedPath,
 		const std::vector<unsigned char>* frameRaw = NULL, IMAGE_FORMAT frameFmt = FORMAT_RAW8,
 		RAW_FORMAT frameRawFmt = RAW_RGGB, YUV_FORMAT frameYuvFmt = YUV_YCBYCR);
-	CString BuildLightTestOutputDir(const CTime& time) const;
-	void WriteLightTestReport(const std::vector<LightTestChannelRecord>& rows, bool allPass) const;
+	CString BuildProductionOutputDir(const CTime& time) const;
+	void EnsureProductionSessionDir();
+	void WriteProductionReport(const std::vector<LightTestChannelRecord>& rows, bool allPass) const;
+	void BuildProductionRowsFromFirmware(int failStage, std::vector<LightTestChannelRecord>& outRows, bool& outAllPass) const;
+	void ApplyProductionRowsToUi(const std::vector<LightTestChannelRecord>& rows);
 	static unsigned __stdcall FirmwareBurnThreadProc(void* pParam);
 	static unsigned __stdcall FirmwareVerifyThreadProc(void* pParam);
 	static unsigned __stdcall LightGateThreadProc(void* pParam);
