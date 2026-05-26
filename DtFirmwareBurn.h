@@ -14,7 +14,7 @@ struct GateFirmwareBurnCfg
 	int fovTypeIndex;
 	/** Relative to exe, default FlashData -> exe\\FlashData\\031{Fov}.bin */
 	TCHAR flashDataDir[MAX_PATH];
-	/** Ms after Start() before burn (chip must be running). */
+	/** Ms after Start (prep, no grab) before burn; I2C/power settle only. */
 	int fwWarmupMs;
 	/** Ms after burn (and optional power cycle) before LightTest. */
 	int postBurnDelayMs;

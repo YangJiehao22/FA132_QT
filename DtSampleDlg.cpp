@@ -368,8 +368,8 @@ BOOL CDtSampleDlg::OnInitDialog()
 		}
 	}
 
-	msg("QT_FA132_Test_SW\r\n");
-	msg("Open->Start->Stop->Close\r\n");
+	msgUtf8(DtZh::kLogAppBanner1);
+	msgUtf8(DtZh::kLogAppBanner2);
     
     /* Auto-enumerate devices on startup */
     OnBnClickedButtonEnum();
@@ -568,19 +568,27 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 		m_dtFunction.ReadDtCarIni();
 		m_dtFunction.ReadGateSpecIni();
 		ReSize();
-		if (!m_dtFunction.Start())
+		const bool fwBurn = m_dtFunction.m_gateFirmwareBurn.enabled;
+		if (fwBurn)
+		{
+			if (!m_dtFunction.StartFirmwarePrep())
+				return;
+		}
+		else if (!m_dtFunction.Start())
+		{
 			return;
+		}
 		m_bStart = TRUE;
 		SetTimer(0, 1000, NULL);
 		KillTimer(TIMER_ID_FW_BURN);
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
 		KillTimer(TIMER_ID_FW_POWER_OFF);
 		KillTimer(TIMER_ID_STREAM_GATE);
-		if (m_dtFunction.m_gateFirmwareBurn.enabled)
+		if (fwBurn)
 		{
 			int warmup = m_dtFunction.m_gateFirmwareBurn.fwWarmupMs;
 			if (warmup < 500)
-				warmup = 3000;
+				warmup = 500;
 			msgUtf8(DtZh::kFwWaitWarmup, warmup);
 			SetTimer(TIMER_ID_FW_BURN, warmup, NULL);
 		}
@@ -712,7 +720,7 @@ unsigned __stdcall CDtSampleDlg::FirmwareBurnWorkerProc(void* param)
 	delete ctx;
 	bool ok = false;
 	if (fn != NULL && ::IsWindow(hwnd))
-		ok = fn->RunFirmwareBurnParallel(true);
+		ok = fn->RunFirmwareBurnParallel(false);
 	if (::IsWindow(hwnd))
 		::PostMessage(hwnd, WM_FW_BURN_DONE, ok ? 1u : 0u, (LPARAM)gen);
 	return ok ? 0u : 1u;
@@ -776,6 +784,10 @@ void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 	KillTimer(0);
 	KillTimer(TIMER_ID_FW_BURN);
 	KillTimer(TIMER_ID_FW_POWER_SETTLE);
+
+	/* Hold grab before painting results so WorkProc can exit join quickly. */
+	if (m_bStart)
+		m_dtFunction.RequestStopCapture();
 
 	if (!forFwPowerCycle)
 	{
@@ -1186,7 +1198,7 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 		m_dtFunction.ReadGateSpecIni();
 		if (!m_dtFunction.Start())
 		{
-			msg("[FirmwareBurn] power-cycle restart Start() failed\r\n");
+			msgUtf8(DtZh::kLogPwCycleStartFail);
 			return;
 		}
 		m_bStart = TRUE;
@@ -1223,12 +1235,12 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 		const bool ok = m_dtFunction.RunLightGatePerChannelReport();
 		if (ok)
 		{
-			msgUtf8("[LightTest] PASS\n");
+			msgUtf8(DtZh::kLogLtPass);
 			SetWindowText(ZH_UTF8(kMainTitleTestOk));
 		}
 		else
 		{
-			msgUtf8("[LightTest] NG\n");
+			msgUtf8(DtZh::kLogLtNg);
 			SetWindowText(ZH_UTF8(kMainTitleTestNg));
 		}
 		StopCaptureAndShowResults(FALSE);

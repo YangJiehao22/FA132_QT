@@ -431,7 +431,7 @@ bool Sony031VerifyFlashCalibration(
 	const unsigned char* expect = VerifyExpectForFov(fovTypeIndex);
 	if (expect == NULL)
 	{
-		msg("[FirmwareVerify] unsupported FovType %s (index=%d)\r\n",
+		msgUtf8(DtZh::kFwVerifyUnsupported,
 			(LPCSTR)VerifyFovLabelA(fovTypeIndex), fovTypeIndex);
 		return false;
 	}
@@ -440,7 +440,7 @@ bool Sony031VerifyFlashCalibration(
 	{
 		if (!SelectMipiVc(devId, vcId))
 		{
-			msg("[FirmwareVerify] SetMipiImageVC failed dev=%d vc=%d\r\n", devId, vcId);
+			msgUtf8(DtZh::kFwVerifySetVcFail, devId, vcId);
 			return false;
 		}
 	}
@@ -458,15 +458,14 @@ bool Sony031VerifyFlashCalibration(
 		unsigned short v = 0;
 		if (ReadReg16(devId, slave, kVerifyReadRegs[i], &v) != 1)
 		{
-			msg("[FirmwareVerify] read fail dev=%d vc=%d reg=0x%04X slave=0x%02X\r\n",
+			msgUtf8(DtZh::kFwVerifyReadFail,
 				devId, vcId, kVerifyReadRegs[i], (unsigned)slave);
 			return false;
 		}
 		outResult->values[i] = v;
 	}
 
-	msg("[FirmwareVerify] regs dev=%d vc=%d %s: C3FC=%02X C400=%02X C407=%02X C406=%02X C405=%02X C404=%02X "
-		"C408=%02X C40C=%02X C413=%02X C412=%02X C411=%02X C410=%02X C415=%02X C414=%02X slave=0x%02X\r\n",
+	msgUtf8(DtZh::kFwVerifyRegs,
 		devId, vcId, (LPCSTR)VerifyFovLabelA(fovTypeIndex),
 		outResult->values[0], outResult->values[1], outResult->values[2], outResult->values[3],
 		outResult->values[4], outResult->values[5], outResult->values[6], outResult->values[7],
@@ -482,7 +481,7 @@ bool Sony031VerifyFlashCalibration(
 			outResult->failIndex = i;
 			outResult->expected = expect[i];
 			outResult->actual = actual;
-			msg("[FirmwareVerify] NG dev=%d vc=%d %s reg=0x%04X expect=0x%02X read=0x%02X slave=0x%02X\r\n",
+			msgUtf8(DtZh::kFwVerifyNgReg,
 				devId, vcId, (LPCSTR)VerifyFovLabelA(fovTypeIndex), kVerifyReadRegs[i],
 				expect[i], actual, (unsigned)slave);
 			return false;
@@ -490,7 +489,7 @@ bool Sony031VerifyFlashCalibration(
 	}
 
 	outResult->success = true;
-	msg("[FirmwareVerify] OK dev=%d vc=%d %s (all 14 regs match)\r\n",
+	msgUtf8(DtZh::kFwVerifyOkLine,
 		devId, vcId, (LPCSTR)VerifyFovLabelA(fovTypeIndex));
 	return true;
 }

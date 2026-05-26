@@ -2,6 +2,7 @@
 #include "DtSample.h"
 #include "DtSpecDlg.h"
 #include "DtEncoding.h"
+#include "DtZhUtf8.h"
 #include "DtDpiUi.h"
 #include "afxdialogex.h"
 
@@ -1553,7 +1554,7 @@ void CDtSpecDlg::OnOK()
 	}
 
 	CStringA pathA(m_pFn->m_strGateSpecIniPath);
-	msg("GateSpec.ini saved: %s\r\n", pathA.GetString());
+	msgUtf8(DtZh::kLogGateSpecSaved, pathA.GetString());
 
 	CDialogEx::OnOK();
 }

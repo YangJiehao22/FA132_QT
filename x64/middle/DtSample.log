@@ -1,5 +1,5 @@
-﻿生成启动时间为 2026/5/25 16:15:37。
-     1>项目“D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\DtSample.vcxproj”在节点 2 上(Rebuild 个目标)。
+﻿生成启动时间为 2026/5/26 9:54:43。
+     1>项目“D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\DtSample.vcxproj”在节点 2 上(Build 个目标)。
      1>C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(363,5): warning MSB8004: Intermediate Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Intermediate Directory.
      1>ClCompile:
          D:\VS2013\VC\bin\x86_amd64\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /GL /D WIN32 /D _WINDOWS /D NDEBUG /D _MBCS /D _AFXDLL /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yc"stdafx.h" /Fp"x64\middle\QtechCalibration.pch" /Fo"x64\middle\\" /Fd"x64\middle\vc120.pdb" /Gd /TP /errorReport:prompt stdafx.cpp
@@ -17,15 +17,15 @@
          DtCarFunction.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtCarFunction.cpp(2120): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtCarFunction.cpp(3166): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>DtCarFunction.cpp(2123): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>DtCarFunction.cpp(4245): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
          DtFirmwareBurn.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
          DtSpecDlg.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtSpecDlg.cpp(898): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>DtSpecDlg.cpp(899): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
          DtChannelDlg.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
@@ -36,7 +36,7 @@
          DtSampleDlg.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtSampleDlg.cpp(595): warning C4102: “update_start_btn”: 未引用的标签
+     1>DtSampleDlg.cpp(603): warning C4102: “update_start_btn”: 未引用的标签
          I2CDebug.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
@@ -73,8 +73,8 @@
          if exist "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\GateSpec.template.utf8" copy /Y "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\GateSpec.template.utf8" "x64\Release\"
          :VCEnd
          已复制         1 个文件。
-     1>已完成生成项目“D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\DtSample.vcxproj”(Rebuild 个目标)的操作。
+     1>已完成生成项目“D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\DtSample.vcxproj”(Build 个目标)的操作。
 
 生成成功。
 
-已用时间 00:00:06.85
+已用时间 00:00:05.75

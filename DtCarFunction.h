@@ -111,6 +111,7 @@ public:
 	CString m_strSensorIniPath;
 
 	BOOL    m_bRunning;				/* WorkProc loop flag */
+	bool    m_bSuppressWorkDraw;	/* Stop requested: no SendMessage draw, GrabHold ASAP */
 	bool    m_bPauseCaptureForBurn;	/* pause grab for firmware burn; keep power/grab init */
 	bool    m_workPowerReady[MAX_CC16 * MAX_DEV];
 	bool    m_workGrabReady[MAX_CC16 * MAX_DEV];
@@ -148,6 +149,10 @@ public:
 	int Open();
 	int Close();
 	int Start();
+	/** Firmware prod: init power/grab only, no WorkProc / no carGrabFrameDirect. */
+	int StartFirmwarePrep();
+	/** GrabHold + suppress preview (call before Stop join; safe to call twice). */
+	void RequestStopCapture();
 	int Stop();
 
 	/** UI-thread capture init (carInitPower + carInitGrab). */
@@ -169,7 +174,8 @@ public:
 	/** Parallel light test per enabled Dev/VC (SsrFps/Cur/Temp/BadPx/Fw). */
 	bool RunLightGatePerChannelReport();
 	/** Parallel Sony031 flash on enabled Dev/VC (same Dev: all VC threads in parallel).
-	    afterStart=true: Start already running. Per-VC I2C addr from sensor_temp_i2c_vc grid. */
+	    afterStart=false (UI): prep init only, no pause/join; power-cycle stays in DtSampleDlg.
+	    afterStart=true (legacy): capture threads running, PauseWorkThreads before burn. */
 	bool RunFirmwareBurnParallel(bool afterStart = false);
 	/** Parallel post-burn register verify on enabled Dev/VC (same pattern as burn). */
 	bool RunFirmwareBurnVerifyAll();

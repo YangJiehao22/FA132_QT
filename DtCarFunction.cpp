@@ -1667,6 +1667,7 @@ DtCarFunction::DtCarFunction()
 	m_bFirmwareBurnHasResult = false;
 	m_bFirmwareBurnInProgress = false;
 	m_bPauseCaptureForBurn = false;
+	m_bSuppressWorkDraw = false;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
 	m_bFirmwareBurnVerifyHasResult = false;
 	memset(m_bFirmwareBurnVerifyPass, 0, sizeof(m_bFirmwareBurnVerifyPass));
@@ -1751,6 +1752,10 @@ void DtCarFunction::ResetFirmwareBurnUiForEnabledChannels()
 
 int DtCarFunction::DrawImageOnUiThread(const DrawImage_t& di, int vcId, int devId)
 {
+	/* Stop/Join: never block WorkProc on UI carDrawImage (SendMessage). */
+	if (m_bSuppressWorkDraw || !m_bRunning)
+		return DT_ERROR_OK;
+
 	/* Burning cell: WorkProc must not push live frames (see WorkProc). */
 	if (IsFirmwareBurnCellActive(devId, vcId))
 		return DT_ERROR_OK;
@@ -1984,7 +1989,7 @@ void DtCarFunction::SaveChannelEnableIni()
 	FlushIniFile(m_strDtCarIniPath);
 	{
 		CStringA pathA(m_strDtCarIniPath);
-		msg("[Channel] saved %d enabled VC (%d Dev x %d VC max) -> %s\r\n",
+		msgUtf8(DtZh::kLogChannelSaved,
 			enabledVc, devSlots, vcSlots, (LPCSTR)pathA);
 	}
 }
@@ -2005,7 +2010,7 @@ void DtCarFunction::ShowChannelSelectDialog(CWnd* pParent)
 				if (IsVcEnabled(d, v))
 					n++;
 		CStringA pathA(m_strDtCarIniPath);
-		msg("[Channel] load %d VC enabled from %s\r\n", n, (LPCSTR)pathA);
+		msgUtf8(DtZh::kLogChannelLoad, (LPCSTR)pathA, n);
 	}
 	if (FindResource(AfxGetResourceHandle(), MAKEINTRESOURCE(IDD_DIALOG_CHANNEL), RT_DIALOG) == NULL)
 	{
@@ -2062,7 +2067,7 @@ int DtCarFunction::ReadGateSpecIni()
 	GateIniFillFirmwareBurn(m_strGateSpecIniPath, GateDefaultFirmwareBurn(), &m_gateFirmwareBurn);
 	{
 		CStringA pathA(m_strGateSpecIniPath);
-		msg("[GateSpec] firmware_burn Enabled=%d (ini: %s)\r\n",
+		msgUtf8(DtZh::kLogGateSpecFw,
 			m_gateFirmwareBurn.enabled ? 1 : 0, (LPCSTR)pathA);
 	}
 	return 1;
@@ -2496,7 +2501,7 @@ static bool JoinWorkThread(DtCarFunction* fn, int devId, DWORD warnAfterMs)
 		{
 			const DWORD dt = GetTickCount() - t0;
 			if (warned)
-				msg("[WorkThread] dev=%d joined after %u ms\r\n", devId, dt);
+				msgUtf8(DtZh::kLogWorkJoin, devId, dt);
 			CloseHandle(h);
 			fn->m_hThread[devId] = NULL;
 			return true;
@@ -2526,7 +2531,7 @@ static void LogFirmwareBurnSummary(DtCarFunction* fn, bool allPass)
 			if (!fn->IsVcEnabled(d, v))
 				continue;
 			const bool chOk = fn->m_bFirmwareBurnPass[d][v];
-			msgUtf8(DtZh::kFwSummaryCh, d, v, chOk ? "PASS" : "FAIL");
+			msgUtf8(DtZh::kFwSummaryCh, d, v, chOk ? DtZh::kStrPass : DtZh::kStrFail);
 		}
 	}
 }
@@ -2542,6 +2547,11 @@ bool DtCarFunction::PauseWorkThreadsForFirmwareBurn()
 		if (!IsDevEnabled(i))
 			continue;
 		::carGrabHold(i);
+		if (m_workGrabReady[i])
+		{
+			::carUnitGrab(i);
+			m_workGrabReady[i] = false;
+		}
 	}
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
@@ -2592,7 +2602,7 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 	_tcsncpy_s(m_gateFirmwareBurn.binPath, binFull, _TRUNCATE);
 	{
 		CStringA pathA(binFull);
-		msg("[FirmwareBurn] bin: %s\r\n", (LPCSTR)pathA);
+		msgUtf8(DtZh::kLogFwBin, (LPCSTR)pathA);
 	}
 
 	if (m_iEnumDevNum <= 0)
@@ -2632,7 +2642,15 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 		{
 			if (!InitWorkCapture(d))
 			{
-				msg("[FirmwareBurn] Dev %d: capture init failed\r\n", d);
+				msgUtf8(DtZh::kFwPrepDevInitFail, d);
+				FirmwareBurnSetProgressTarget(NULL);
+				m_bFirmwareBurnInProgress = false;
+				MarkEnabledFirmwareBurnFailed(this);
+				return false;
+			}
+			if (!m_workGrabReady[d])
+			{
+				msgUtf8(DtZh::kFwPrepNotReady, d);
 				FirmwareBurnSetProgressTarget(NULL);
 				m_bFirmwareBurnInProgress = false;
 				MarkEnabledFirmwareBurnFailed(this);
@@ -2641,7 +2659,7 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 		}
 		else if (!m_workGrabReady[d])
 		{
-			msg("[FirmwareBurn] Dev %d: grab not ready (wait FwWarmupMs after Start)\r\n", d);
+			msgUtf8(DtZh::kLogFwGrabNotReady, d);
 			FirmwareBurnSetProgressTarget(NULL);
 			m_bFirmwareBurnInProgress = false;
 			MarkEnabledFirmwareBurnFailed(this);
@@ -2654,7 +2672,7 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 			MarkEnabledFirmwareBurnFailed(this);
 			return false;
 		}
-		msg("[FirmwareBurn] Dev %d: parallel VC burn (per-VC I2C slave from GateSpec D%d_V#)\r\n", d, d);
+		msgUtf8(DtZh::kLogFwBurnDev, d, d);
 		for (int v = 0; v < m_iVcNum; v++)
 		{
 			if (!IsVcEnabled(d, v))
@@ -2670,7 +2688,7 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 			if (h == NULL)
 			{
 				delete tp;
-				msg("[FirmwareBurn] failed to start thread dev=%d vc=%d\r\n", d, v);
+				msgUtf8(DtZh::kLogFwThreadFail, d, v);
 				for (size_t i = 0; i < threads.size(); i++)
 				{
 					WaitForSingleObject(threads[i], INFINITE);
@@ -2709,27 +2727,9 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 		}
 	}
 
-	if (!afterStart && m_gateFirmwareBurn.powerCycleAfter)
-	{
-		for (int d = 0; d < m_iEnumDevNum; d++)
-		{
-			if (!IsDevEnabled(d))
-				continue;
-			EnterCriticalSection(&m_csBurnDev[d]);
-			UninitWorkCapture(d);
-			LeaveCriticalSection(&m_csBurnDev[d]);
-		}
-		Sleep(2000);
-		for (int d = 0; d < m_iEnumDevNum; d++)
-		{
-			if (!IsDevEnabled(d))
-				continue;
-			if (!InitWorkCapture(d))
-				allPass = false;
-		}
-	}
-
 	LogFirmwareBurnSummary(this, allPass);
+	/* Power-cycle after burn is handled in CDtSampleDlg (Stop / 2s / Start); do not duplicate here. */
+
 	if (!allPass)
 		msgUtf8(DtZh::kFwParallelFail);
 	return allPass;
@@ -2749,7 +2749,7 @@ static void LogFirmwareVerifySummary(DtCarFunction* fn, bool allPass)
 			if (!fn->IsVcEnabled(d, v))
 				continue;
 			const bool chOk = fn->m_bFirmwareBurnVerifyPass[d][v];
-			msgUtf8(DtZh::kFwVerifySummaryCh, d, v, chOk ? "PASS" : "FAIL");
+			msgUtf8(DtZh::kFwVerifySummaryCh, d, v, chOk ? DtZh::kStrPass : DtZh::kStrFail);
 		}
 	}
 }
@@ -2771,8 +2771,7 @@ bool DtCarFunction::RunFirmwareBurnVerifyAll()
 	const GateFirmwareBurnCfg cfg = m_gateFirmwareBurn;
 	{
 		CStringA fovA(CT2A(FirmwareFovTypeName(cfg.fovTypeIndex)));
-		msg("[FirmwareVerify] FovType=%s (index=%d, parallel VC, I2C from GateSpec D#_V#)\r\n",
-			(LPCSTR)fovA, cfg.fovTypeIndex);
+		msgUtf8(DtZh::kLogFwVerifyFov, (LPCSTR)fovA, cfg.fovTypeIndex);
 	}
 
 	std::vector<HANDLE> threads;
@@ -2791,7 +2790,7 @@ bool DtCarFunction::RunFirmwareBurnVerifyAll()
 			}
 			continue;
 		}
-		msg("[FirmwareVerify] Dev %d: parallel VC verify (per-VC I2C slave from GateSpec D%d_V#)\r\n", d, d);
+		msgUtf8(DtZh::kLogFwVerifyDev, d, d);
 		for (int v = 0; v < m_iVcNum; v++)
 		{
 			if (!IsVcEnabled(d, v))
@@ -2807,7 +2806,7 @@ bool DtCarFunction::RunFirmwareBurnVerifyAll()
 			if (h == NULL)
 			{
 				delete tp;
-				msg("[FirmwareVerify] failed to start thread dev=%d vc=%d\r\n", d, v);
+				msgUtf8(DtZh::kLogFwVerifyThreadFail, d, v);
 				m_bFirmwareBurnVerifyPass[d][v] = false;
 				m_bFirmwareBurnPass[d][v] = false;
 				continue;
@@ -2930,12 +2929,12 @@ void DtCarFunction::WriteLightTestReport(const std::vector<LightTestChannelRecor
 		m_strGateSpecIniPath, m_specDelayMs, m_strSensorIniPath))
 	{
 		CStringA csvA(csvPath);
-		msg("[LightTest] report csv append: %s\r\n", csvA.GetString());
+		msgUtf8(DtZh::kLogLtCsvOk, csvA.GetString());
 	}
 	else
 	{
 		CStringA csvA(csvPath);
-		msg("[LightTest] report csv failed: %s\r\n", csvA.GetString());
+		msgUtf8(DtZh::kLogLtCsvFail, csvA.GetString());
 	}
 }
 
@@ -2955,20 +2954,20 @@ bool DtCarFunction::GrabFrameDirectOwned(int devId, int vcId,
 
 	if (devId < 0 || devId >= MAX_CC16 * MAX_DEV || vcId < 0 || vcId >= MAX_VC)
 		return false;
-	if (!m_bRunning)
+	if (!m_bRunning || m_bSuppressWorkDraw)
 	{
 		msgUtf8(DtZh::kGrabDirectNotRun, devId, vcId);
 		return false;
 	}
 
 	const GrabTab* pTab = m_grabTabValid[devId] ? &m_grabTab[devId] : NULL;
-	EnterCriticalSection(&m_csGrab);
 
 	DtImage_t grabImg = {};
 	int grabVc = vcId;
 	const int iRet = ::carGrabFrameDirect(&grabImg, &grabVc, devId);
 
 	bool ok = false;
+	EnterCriticalSection(&m_csGrab);
 	if (iRet == DT_ERROR_OK && grabImg.data != NULL
 		&& grabImg.width >= 1 && grabImg.height >= 1
 		&& (grabVc == vcId || m_iVcNum <= 1))
@@ -3616,20 +3615,53 @@ static int LightGateParamOrder(const void* a, const void* b)
 	return 0;
 }
 
+static void LogLightGateChannelLine(DtCarFunction* fn, const LightTestChannelRecord& r)
+{
+	if (fn == NULL)
+		return;
+	const char* passS = r.overallPass ? DtZh::kStrPass : DtZh::kStrFail;
+	const char* fwS = DtZh::kStrNa;
+	if (fn->m_gateFirmwareBurn.enabled && fn->m_bFirmwareBurnHasResult)
+		fwS = fn->m_bFirmwareBurnPass[r.devId][r.vcId] ? DtZh::kStrOk : DtZh::kStrNg;
+	const char* bpS = DtZh::kStrNa;
+	if (r.badPixelEnabled)
+		bpS = r.badAnalyzed ? (r.okBadPx ? DtZh::kStrOk : DtZh::kStrNg) : DtZh::kStrNa;
+
+	char buf[720] = {};
+	if (r.hasTemp)
+	{
+		_snprintf_s(buf, _TRUNCATE, DtZh::kLtChFmtTemp,
+			r.devId, r.vcId, passS, fwS,
+			r.ssrFps, r.ssrMin, r.ssrMax,
+			r.current_mA, r.curMin, r.curMax,
+			r.tempC, r.tempMin, r.tempMax,
+			bpS, r.badCount);
+	}
+	else
+	{
+		_snprintf_s(buf, _TRUNCATE, DtZh::kLtChFmtNoTemp,
+			r.devId, r.vcId, passS, fwS,
+			r.ssrFps, r.ssrMin, r.ssrMax,
+			r.current_mA, r.curMin, r.curMax,
+			bpS, r.badCount);
+	}
+	msgUtf8(DtZh::kLogLtLine, buf);
+}
+
 bool DtCarFunction::RunLightGatePerChannelReport()
 {
 	ReadGateSpecIni();
 
 	CStringA specA(m_strGateSpecIniPath);
-	msg("[LightTest] GateSpec.ini: %s\r\n", specA.GetString());
-	msg("[LightTest] delay=%d ms | SsrFps[%.3f,%.3f] mA[%.3f,%.3f] TempC[%.1f,%.1f] (parallel VC)\r\n",
+	msgUtf8(DtZh::kLogLtIni, specA.GetString());
+	msgUtf8(DtZh::kLogLtDelay,
 		m_specDelayMs,
 		m_gateDefault.minSsrFps, m_gateDefault.maxSsrFps,
 		m_gateDefault.minCurrent_mA, m_gateDefault.maxCurrent_mA,
 		m_gateDefault.minSensorTemp_C, m_gateDefault.maxSensorTemp_C);
 	if (m_gateSensorTempI2c.enabled)
 	{
-		msg("[LightTest] temp I2C per VC from GateSpec D#_V# | mode=%u reg=0x%04X/0x%04X formula (b0*%.0f+b1*%.0f)/%.3f%+.3f\r\n",
+		msgUtf8(DtZh::kLogLtTempI2c,
 			m_gateSensorTempI2c.i2cMode,
 			m_gateSensorTempI2c.regLow, m_gateSensorTempI2c.regHigh,
 			m_gateSensorTempI2c.coeffLow, m_gateSensorTempI2c.coeffHigh,
@@ -3637,7 +3669,7 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 	}
 	if (m_gateBadPixelDark.enabled)
 	{
-		msg("[LightTest] bad_pixel_dark ON | mode=%d maxCl=%d hotDelta=%d clusterTh=%d minClPx=%d ppm=%d\r\n",
+		msgUtf8(DtZh::kLogLtBpOn,
 			m_gateBadPixelDark.algoMode,
 			m_gateBadPixelDark.maxBadPixels,
 			m_gateBadPixelDark.hotDelta,
@@ -3648,7 +3680,7 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 
 	if (m_iEnumDevNum <= 0 || m_iVcNum <= 0)
 	{
-		msg("[LightTest] skip: no device / invalid VC count\r\n");
+		msgUtf8(DtZh::kLogLtSkip);
 		m_bLightGateHasResult = false;
 		return false;
 	}
@@ -3689,7 +3721,7 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 			HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::LightGateThreadProc, tp, 0, &threadId);
 			if (h == NULL)
 			{
-				msg("[LightTest] failed to start thread dev=%d vc=%d (run sync)\r\n", d, v);
+				msgUtf8(DtZh::kLogLtThreadFail, d, v);
 				tp->pass = RunLightGateOneChannel(this, d, v, tp->rec, tp->line);
 				params.push_back(tp);
 				continue;
@@ -3719,8 +3751,7 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 		if (!tp->pass)
 			allPass = false;
 		reportRows.push_back(tp->rec);
-		CStringA lineA(tp->line);
-		msg("[LightTest] %s\r\n", lineA.GetString());
+		LogLightGateChannelLine(this, tp->rec);
 		delete tp;
 	}
 
@@ -3905,7 +3936,7 @@ int DtCarFunction::Open() {
 			continue;
 		}
 		GrabTab pGrabTab;
-		msg("DevID %d:GrabTab%d\n", i, sizeof(GrabTab));
+		msgUtf8(DtZh::kLogGrabTab, i, (int)sizeof(GrabTab));
 		iRet = ::carLoadGrabPara(m_strSensorIniPath.GetBuffer(), i);
 		m_strSensorIniPath.ReleaseBuffer();
 		if (iRet != DT_ERROR_OK)
@@ -3918,8 +3949,7 @@ int DtCarFunction::Open() {
 		{
 			m_grabTab[i] = pGrabTab;
 			m_grabTabValid[i] = true;
-			msg("DevID %d: sensor outformat=%u (Bayer/YUV phase %%4)\r\n",
-				i, (unsigned)pGrabTab.sensor.outformat);
+			msgUtf8(DtZh::kLogSensorFmt, i, (unsigned)pGrabTab.sensor.outformat);
 		}
 		else
 		{
@@ -3933,10 +3963,10 @@ int DtCarFunction::Open() {
 		{
 			devOpened[i] = true;
 			openedCount++;
-			msg("DevID %d:Open %s OK\n", i, m_cDeviceName[i]);
+			msgUtf8(DtZh::kLogOpenOk, i, m_cDeviceName[i]);
 		}
 		else
-			msg("DevID %d:Open %s failed with err %d\n", i, m_cDeviceName[i], iRet);
+			msgUtf8(DtZh::kLogOpenFail, i, m_cDeviceName[i], iRet);
 	}
 
 	if (openedCount <= 0)
@@ -3972,9 +4002,9 @@ int DtCarFunction::Close() {
 	{
 		iRet = ::carCloseDevice(i);
 		if (iRet == DT_ERROR_OK)
-			msg("DevID %d:Close %s OK\n", i, m_cDeviceName[i] ? m_cDeviceName[i] : "");
+			msgUtf8(DtZh::kLogCloseOk, i, m_cDeviceName[i] ? m_cDeviceName[i] : "");
 		else if (iRet != DT_ERROR_FAILED)
-			msg("DevID %d:Close %s failed with err %d\n", i,
+			msgUtf8(DtZh::kLogCloseFail, i,
 				m_cDeviceName[i] ? m_cDeviceName[i] : "", iRet);
 	}
 	return 1;
@@ -3988,13 +4018,13 @@ bool DtCarFunction::InitWorkCapture(int devId)
 		return true;
 
 	int iRet = ::carInitPower(devId);
-	msg("DevID %d: carInitPower ret=%d\r\n", devId, iRet);
+	msgUtf8(DtZh::kLogDevInitPower, devId, iRet);
 	if (iRet != DT_ERROR_OK)
 		return false;
 	m_workPowerReady[devId] = true;
 
 	iRet = ::carInitGrab(devId);
-	msg("DevID %d: carInitGrab ret=%d\r\n", devId, iRet);
+	msgUtf8(DtZh::kLogDevInitGrab, devId, iRet);
 	if (iRet != DT_ERROR_OK)
 	{
 		UninitWorkCapture(devId);
@@ -4020,10 +4050,74 @@ void DtCarFunction::UninitWorkCapture(int devId)
 	}
 }
 
+// Burn prep: power/grab init on UI thread, no WorkProc (no YUV before flash).
+void DtCarFunction::RequestStopCapture()
+{
+	m_bSuppressWorkDraw = true;
+	for (int i = 0; i < m_iEnumDevNum; i++)
+	{
+		if (!IsDevEnabled(i))
+			continue;
+		::carGrabHold(i);
+		/* UnitGrab while WorkProc may be blocked in carGrabFrameDirect (~15s SDK wait).
+		   GrabHold alone does not cancel an in-flight Direct grab. */
+		if (m_workGrabReady[i])
+		{
+			::carUnitGrab(i);
+			m_workGrabReady[i] = false;
+			msgUtf8(DtZh::kLogWorkRequestStop, i);
+		}
+	}
+}
+
+int DtCarFunction::StartFirmwarePrep()
+{
+	m_bRunning = FALSE;
+	m_bPauseCaptureForBurn = false;
+	m_bSuppressWorkDraw = false;
+	for (int i = 0; i < MAX_CC16 * MAX_DEV; i++)
+		m_hThread[i] = NULL;
+
+	for (int i = 0; i < MAX_CC16 * MAX_DEV; i++)
+	{
+		m_workPowerReady[i] = false;
+		m_workGrabReady[i] = false;
+	}
+	ResetPreviewDisplay();
+	InitAllPreviewDisplays();
+
+	int started = 0;
+	for (int i = 0; i < m_iEnumDevNum; i++)
+	{
+		if (!IsDevEnabled(i) || !m_grabTabValid[i])
+			continue;
+		if (!InitWorkCapture(i))
+		{
+			msgUtf8(DtZh::kFwPrepDevInitFail, i);
+			for (int j = 0; j < m_iEnumDevNum; j++)
+			{
+				if (!IsDevEnabled(j))
+					continue;
+				UninitWorkCapture(j);
+			}
+			return 0;
+		}
+		started++;
+	}
+	if (started <= 0)
+	{
+		msgUtf8(DtZh::kNoChannelEnabled);
+		return 0;
+	}
+	msgUtf8(DtZh::kFwPrepInitOnly);
+	return 1;
+}
+
 // Start grab worker threads
 int DtCarFunction::Start() {
 
 	m_bRunning = true;
+	m_bSuppressWorkDraw = false;
 	for (int i = 0; i < MAX_CC16 * MAX_DEV; i++)
 		m_hThread[i] = NULL;
 
@@ -4066,14 +4160,10 @@ int DtCarFunction::Start() {
 
 int DtCarFunction::Stop() {
 
+	/* Hold grab before clearing m_bRunning so blocked carGrabFrameDirect can return. */
+	RequestStopCapture();
 	m_bRunning = FALSE;
 	m_bPauseCaptureForBurn = false;
-	for (int i = 0; i < m_iEnumDevNum; i++)
-	{
-		if (!IsDevEnabled(i))
-			continue;
-		::carGrabHold(i);
-	}
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
 		if (!IsDevEnabled(i) || m_hThread[i] == NULL)
@@ -4092,11 +4182,11 @@ int DtCarFunction::Stop() {
 
 void DtCarFunction::WorkProc(int iDevID)
 {
-	msg("WorkProc(%s) Enter\r\n", m_cDeviceName[iDevID] ? m_cDeviceName[iDevID] : "?");
+	msgUtf8(DtZh::kLogWorkProcEnter, m_cDeviceName[iDevID] ? m_cDeviceName[iDevID] : "?");
 
 	if (!m_grabTabValid[iDevID])
 	{
-		msg("DevID %d: WorkProc skipped (sensor ini not loaded for this device)\r\n", iDevID);
+		msgUtf8(DtZh::kLogWorkProcSkip, iDevID);
 		return;
 	}
 
@@ -4107,75 +4197,94 @@ void DtCarFunction::WorkProc(int iDevID)
 
 	bool bInitStatus = InitWorkCapture(iDevID);
 	if (!bInitStatus)
-		msg("DevID %d: WorkProc capture init failed\r\n", iDevID);
+		msgUtf8(DtZh::kLogWorkProcInitFail, iDevID);
 
 	DrawImage_t tDrawImage;
 
 	while (m_bRunning && bInitStatus)
 	{
+		if (!m_bRunning || m_bSuppressWorkDraw)
+			break;
+
 		const int curCnt = (m_iVcNum > 0 && m_iVcNum <= MAX_VC) ? m_iVcNum : 1;
 		int pmuCur[MAX_VC] = { 0 };
 		::carGetPmuCurrent(pmuCur, curCnt, iDevID);
 		for (int v = 0; v < curCnt; v++)
 			m_tVcData[iDevID][v].iCurrent = pmuCur[v];
 
-		if (!m_bRunning)
+		if (!m_bRunning || m_bSuppressWorkDraw)
 			break;
 
 		int grabVc = 0;
-		EnterCriticalSection(&m_csGrab);
+		/* Do not hold m_csGrab across carGrabFrameDirect (SDK may block ~15s). */
 		iRet = ::carGrabFrameDirect(&grabImg, &grabVc, iDevID);
+
+		if (!m_bRunning || m_bSuppressWorkDraw)
+			break;
+
 		if (iRet == DT_ERROR_OK)
 		{
-			iVcID = grabVc;
-			::carGetChannelData(&m_tVcData[iDevID][iVcID], iVcID, iDevID);
-
-			VcGrayCache& graySlot = m_grayCache[iDevID][grabVc];
-			if (graySlot.pending != 0)
-				UpdateGrayCacheFromGrab(iDevID, grabVc, grabImg);
-
-			if (m_bRunning && IsVcEnabled(iDevID, iVcID))
+			bool doDraw = false;
+			EnterCriticalSection(&m_csGrab);
+			if (m_bRunning && !m_bSuppressWorkDraw)
 			{
-				HWND hVid = m_hWndVideo[iDevID][iVcID];
-				if (hVid != NULL && ::IsWindow(hVid))
+				iVcID = grabVc;
+				::carGetChannelData(&m_tVcData[iDevID][iVcID], iVcID, iDevID);
+
+				VcGrayCache& graySlot = m_grayCache[iDevID][grabVc];
+				if (graySlot.pending != 0)
+					UpdateGrayCacheFromGrab(iDevID, grabVc, grabImg);
+
+				doDraw = IsVcEnabled(iDevID, iVcID);
+				if (doDraw)
 				{
-					unsigned short iw = m_vidWndW[iDevID][iVcID];
-					unsigned short ih = m_vidWndH[iDevID][iVcID];
-					if (iw < 1) iw = 1;
-					if (ih < 1) ih = 1;
+					HWND hVid = m_hWndVideo[iDevID][iVcID];
+					if (hVid != NULL && ::IsWindow(hVid))
+					{
+						unsigned short iw = m_vidWndW[iDevID][iVcID];
+						unsigned short ih = m_vidWndH[iDevID][iVcID];
+						if (iw < 1) iw = 1;
+						if (ih < 1) ih = 1;
 
-					m_workShowText[iDevID].Format(
-						"[Dev %d VC %d] %s #%d\r\n Volt:%.3fV,Current :%.3f mA\r\n frames: %llu, %.3f fps, delay:%u us \r\n Ecc err:%u, Crc err:%u\r\n Ssr fr: %.3f fps,Fr Gap(us):%u \r\n LossFr :%d\r\n ",
-						iDevID, iVcID,
-						m_cDeviceName[iDevID] ? m_cDeviceName[iDevID] : "",
-						iDevID * m_iVcNum + iVcID + 1,
-						m_tVcData[iDevID][iVcID].iVoltage / 1000.f,
-						m_tVcData[iDevID][iVcID].iCurrent / 1000000.f,
-						(unsigned long long)m_tVcData[iDevID][iVcID].uFrameCount,
-						m_tVcData[iDevID][iVcID].dFrameRate,
-						m_tVcData[iDevID][iVcID].iDelay,
-						m_tVcData[iDevID][iVcID].iEccErrorCnt,
-						m_tVcData[iDevID][iVcID].iCrcErrorCnt,
-						m_tVcData[iDevID][iVcID].dSsrFrameRate,
-						m_tVcData[iDevID][iVcID].iFrameGap,
-						m_tVcData[iDevID][iVcID].iLossFrameCnt);
+						m_workShowText[iDevID].Format(
+							"[Dev %d VC %d] %s #%d\r\n Volt:%.3fV,Current :%.3f mA\r\n frames: %llu, %.3f fps, delay:%u us \r\n Ecc err:%u, Crc err:%u\r\n Ssr fr: %.3f fps,Fr Gap(us):%u \r\n LossFr :%d\r\n ",
+							iDevID, iVcID,
+							m_cDeviceName[iDevID] ? m_cDeviceName[iDevID] : "",
+							iDevID * m_iVcNum + iVcID + 1,
+							m_tVcData[iDevID][iVcID].iVoltage / 1000.f,
+							m_tVcData[iDevID][iVcID].iCurrent / 1000000.f,
+							(unsigned long long)m_tVcData[iDevID][iVcID].uFrameCount,
+							m_tVcData[iDevID][iVcID].dFrameRate,
+							m_tVcData[iDevID][iVcID].iDelay,
+							m_tVcData[iDevID][iVcID].iEccErrorCnt,
+							m_tVcData[iDevID][iVcID].iCrcErrorCnt,
+							m_tVcData[iDevID][iVcID].dSsrFrameRate,
+							m_tVcData[iDevID][iVcID].iFrameGap,
+							m_tVcData[iDevID][iVcID].iLossFrameCnt);
 
-					memset(&tDrawImage, 0, sizeof(tDrawImage));
-					tDrawImage.hVideoWnd = hVid;
-					tDrawImage.nImgWndW = iw;
-					tDrawImage.nImgWndH = ih;
-					tDrawImage.bShowImg = true;
-					tDrawImage.bShowText = true;
-					tDrawImage.szShowData = (LPCSTR)m_workShowText[iDevID];
-					if (m_bRunning && !IsFirmwareBurnCellActive(iDevID, iVcID))
-						DrawImageOnUiThread(tDrawImage, iVcID, iDevID);
+						memset(&tDrawImage, 0, sizeof(tDrawImage));
+						tDrawImage.hVideoWnd = hVid;
+						tDrawImage.nImgWndW = iw;
+						tDrawImage.nImgWndH = ih;
+						tDrawImage.bShowImg = true;
+						tDrawImage.bShowText = true;
+						tDrawImage.szShowData = (LPCSTR)m_workShowText[iDevID];
+					}
+					else
+						doDraw = false;
 				}
 			}
+			else
+				doDraw = false;
+			LeaveCriticalSection(&m_csGrab);
+
+			if (doDraw && m_bRunning && !m_bSuppressWorkDraw
+				&& !IsFirmwareBurnCellActive(iDevID, iVcID))
+				DrawImageOnUiThread(tDrawImage, iVcID, iDevID);
 		}
-		LeaveCriticalSection(&m_csGrab);
 	}
 	/* Uninit only on Stop()/Close() after thread join — avoids double carUnitGrab (0xC0000008). */
-	msg("WorkProc(%s) Exit\r\n", m_cDeviceName[iDevID]);
+	msgUtf8(DtZh::kLogWorkProcExit, m_cDeviceName[iDevID]);
 }
 
 void DtCarFunction::ShowI2cDebug(int uCurSel)
