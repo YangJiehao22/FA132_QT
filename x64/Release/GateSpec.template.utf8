@@ -104,6 +104,8 @@ SaveDir={{BP_DIR}}
 ; 须先 Open 再 Start；烧录前仅 I2C/上电 init，不抓图；FwWarmupMs 后再烧录
 ; Enabled=1 开启；烧录 NG 则 Stop，不进入 LightTest
 Enabled={{FW_EN}}
+; ReadSensorIdEnabled=1 烧录前并行读 SensorID(0x7E80x10)；=0 关闭
+ReadSensorIdEnabled={{FW_READ_SENSOR_ID}}
 ; FovType: RABOB065200 | RABOM826200 | RABOM826100 | RABOM82660Flip | RABOM82660
 FovType={{FW_FOV_TYPE}}
 FovTypeIndex={{FW_FOV_INDEX}}

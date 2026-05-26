@@ -48,6 +48,8 @@ static bool EnsureDtccm2Procs()
 
 const int kSony031FlashSize = 0x80000;
 const unsigned char kI2cMode = 3;
+const int kSensorIdRegCount = 10;
+const unsigned short kSensorIdRegBase = 0x7E80;
 
 static int WriteReg(int devId, unsigned char slave, unsigned short reg, unsigned short val)
 {
@@ -225,6 +227,73 @@ bool FirmwareBurnSetupDevI2c(int devId, const GateFirmwareBurnCfg& cfg)
 	{
 		msgUtf8(DtZh::kFwI2cRateFail, devId, iRet);
 		return false;
+	}
+	return true;
+}
+
+bool Sony031ReadSensorId(
+	int devId,
+	int vcId,
+	const GateFirmwareBurnCfg& cfg,
+	unsigned char slaveHint,
+	Sony031SensorIdResult* outResult)
+{
+	Sony031SensorIdResult local = {};
+	if (outResult == NULL)
+		outResult = &local;
+	outResult->success = false;
+	outResult->errorCode = 0;
+	outResult->sensorIdHex[0] = 0;
+	outResult->slaveId = 0;
+
+	if (devId < 0 || devId >= MAX_CC16 * MAX_DEV || vcId < 0 || vcId >= MAX_VC)
+	{
+		outResult->errorCode = 10;
+		return false;
+	}
+
+	if (cfg.useMipiVcForBurn)
+	{
+		if (!SelectMipiVc(devId, vcId))
+		{
+			msgUtf8(DtZh::kFwSetVcFail, devId, vcId);
+			outResult->errorCode = 13;
+			return false;
+		}
+	}
+
+	unsigned char slave = 0;
+	if (!ResolveFlashSlave(devId, vcId, slaveHint, cfg.autoDetectSlave, &slave))
+	{
+		msgUtf8(DtZh::kFwSlaveDetectFail, devId, vcId);
+		outResult->errorCode = 3;
+		return false;
+	}
+	outResult->slaveId = slave;
+
+	CString hex;
+	for (int i = 0; i < kSensorIdRegCount; i++)
+	{
+		unsigned short val = 0;
+		if (ReadReg16(devId, slave, (unsigned short)(kSensorIdRegBase + i), &val) != 1)
+		{
+			outResult->errorCode = 2;
+			msgUtf8(DtZh::kFwSensorIdFail, devId, vcId);
+			return false;
+		}
+		CString part;
+		part.Format(_T("%02x"), (unsigned)(val & 0xff));
+		hex += part;
+	}
+	if (hex.GetLength() >= (int)_countof(outResult->sensorIdHex))
+		hex.Truncate(_countof(outResult->sensorIdHex) - 1);
+	_tcsncpy_s(outResult->sensorIdHex, hex, _TRUNCATE);
+
+	outResult->success = true;
+	outResult->errorCode = 0;
+	{
+		CStringA idA(outResult->sensorIdHex);
+		msgUtf8(DtZh::kFwSensorIdOk, devId, vcId, idA.GetString());
 	}
 	return true;
 }

@@ -9,6 +9,7 @@ enum ProductionFailStage
 	PROD_STAGE_BURN = 1,
 	PROD_STAGE_VERIFY = 2,
 	PROD_STAGE_LIGHT = 3,
+	PROD_STAGE_SENSOR_ID = 4,
 };
 
 /** ASCII tag for CSV column FailStage. */
@@ -60,6 +61,9 @@ struct LightTestChannelRecord
 
 	CString imageBmp;
 	CString imageRawUnpacked;
+
+	/** Lowercase hex, 20 chars when read OK (Ruibo 0x7E80 x10). */
+	CString sensorIdHex;
 };
 
 /** Append rows to daily Production_report.csv (create with header+BOM if missing). */

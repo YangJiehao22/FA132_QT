@@ -832,7 +832,9 @@ void CDtSampleDlg::ContinueAfterFirmwareBurn(bool burnOk)
 {
 	if (!burnOk)
 	{
-		m_dtFunction.FinalizeProductionRun(PROD_STAGE_BURN);
+		const int stage = m_dtFunction.AnySensorIdReadFailed()
+			? PROD_STAGE_SENSOR_ID : PROD_STAGE_BURN;
+		m_dtFunction.FinalizeProductionRun(stage);
 		SetWindowText(ZH_UTF8(kMainTitleTestNg));
 		if (m_bStart)
 			StopCaptureAndShowResults(FALSE);

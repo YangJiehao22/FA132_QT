@@ -8,6 +8,7 @@ const char* ProductionFailStageTag(int stage)
 	case PROD_STAGE_BURN: return "BURN";
 	case PROD_STAGE_VERIFY: return "VERIFY";
 	case PROD_STAGE_LIGHT: return "LIGHT";
+	case PROD_STAGE_SENSOR_ID: return "SENSOR_ID";
 	case PROD_STAGE_OK:
 	default: return "OK";
 	}
@@ -112,6 +113,7 @@ bool WriteProductionReportCsv(
 		{
 			CStringA hdr;
 			bool first = true;
+			AppendCsvField(hdr, "SensorID", &first);
 			AppendCsvField(hdr, "Time", &first);
 			AppendCsvField(hdr, "OverallResult", &first);
 			AppendCsvField(hdr, "FailStage", &first);
@@ -171,6 +173,10 @@ bool WriteProductionReportCsv(
 			const LightTestChannelRecord& r = rows[i];
 			CStringA line;
 			bool first = true;
+			if (!r.sensorIdHex.IsEmpty())
+				AppendCsvField(line, CStringA(r.sensorIdHex), &first);
+			else
+				AppendCsvField(line, "", &first);
 			AppendCsvField(line, timeA, &first);
 			if (i == 0)
 				AppendCsvField(line, overallA, &first);

@@ -25,6 +25,8 @@ struct GateFirmwareBurnCfg
 	bool powerCycleAfter;
 	/** After burn + power-cycle: read key regs (Ruibo ReadFlashCalibrationResult). */
 	bool verifyEnabled;
+	/** Before burn: read 10 regs @0x7E80 (Ruibo ReadSensorID). */
+	bool readSensorIdEnabled;
 	/** Resolved full path (runtime). */
 	TCHAR binPath[MAX_PATH];
 };
@@ -45,6 +47,15 @@ struct Sony031BurnResult
 	unsigned char slaveId;
 };
 
+/** Ruibo ReadSensorID: 10 x 16-bit @0x7E80, hex string (20 chars). errorCode 2 = read fail. */
+struct Sony031SensorIdResult
+{
+	bool success;
+	int errorCode;
+	TCHAR sensorIdHex[21];
+	unsigned char slaveId;
+};
+
 const TCHAR* FirmwareFovTypeName(int index);
 int FirmwareFovIndexFromName(LPCTSTR name);
 /** Build {exe}\\{flashDataDir}\\031{Fov}.bin ; returns false if file missing. */
@@ -56,6 +67,14 @@ bool FirmwareBurnSetupDevI2c(int devId, const GateFirmwareBurnCfg& cfg);
 /** UI thread receives WM_FW_BURN_PROGRESS (see DtCarFunction.h). */
 void FirmwareBurnSetProgressTarget(HWND hwnd);
 void FirmwareBurnReportProgress(int devId, int vcId, int percent);
+
+/** Read module SensorID before flash (Ruibo ReadSensorID). */
+bool Sony031ReadSensorId(
+	int devId,
+	int vcId,
+	const GateFirmwareBurnCfg& cfg,
+	unsigned char slaveHint,
+	Sony031SensorIdResult* outResult);
 
 /** Sony ISX031 512KB flash program (Ruibo Sony031WriteFlash core). */
 bool Sony031FlashProgram(

@@ -97,6 +97,7 @@ static GateFirmwareBurnCfg GateDefaultFirmwareBurn()
 	c.useMipiVcForBurn = false;
 	c.powerCycleAfter = true;
 	c.verifyEnabled = true;
+	c.readSensorIdEnabled = true;
 	return c;
 }
 
@@ -134,6 +135,7 @@ static void GateIniFillFirmwareBurn(LPCTSTR path, const GateFirmwareBurnCfg& fb,
 	out->useMipiVcForBurn = (GateIniInt(path, sec, _T("UseMipiVcForBurn"), fb.useMipiVcForBurn ? 1 : 0) != 0);
 	out->powerCycleAfter = (GateIniInt(path, sec, _T("PowerCycleAfter"), fb.powerCycleAfter ? 1 : 0) != 0);
 	out->verifyEnabled = (GateIniInt(path, sec, _T("VerifyEnabled"), fb.verifyEnabled ? 1 : 0) != 0);
+	out->readSensorIdEnabled = (GateIniInt(path, sec, _T("ReadSensorIdEnabled"), fb.readSensorIdEnabled ? 1 : 0) != 0);
 	out->binPath[0] = 0;
 	ResolveFirmwareBinPath(*out, out->binPath);
 }
@@ -1670,6 +1672,9 @@ DtCarFunction::DtCarFunction()
 	m_bSuppressWorkDraw = false;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
 	memset(m_fwBurnErrCode, 0, sizeof(m_fwBurnErrCode));
+	m_bSensorIdHasResult = false;
+	memset(m_bSensorIdReadOk, 0, sizeof(m_bSensorIdReadOk));
+	memset(m_sensorIdHex, 0, sizeof(m_sensorIdHex));
 	m_bFirmwareBurnVerifyHasResult = false;
 	memset(m_bFirmwareBurnVerifyPass, 0, sizeof(m_bFirmwareBurnVerifyPass));
 	m_hwndFirmwareBurnProgress = NULL;
@@ -2069,7 +2074,9 @@ int DtCarFunction::ReadGateSpecIni()
 	{
 		CStringA pathA(m_strGateSpecIniPath);
 		msgUtf8(DtZh::kLogGateSpecFw,
-			m_gateFirmwareBurn.enabled ? 1 : 0, (LPCSTR)pathA);
+			m_gateFirmwareBurn.enabled ? 1 : 0,
+			m_gateFirmwareBurn.readSensorIdEnabled ? 1 : 0,
+			(LPCSTR)pathA);
 	}
 	return 1;
 }
@@ -2353,6 +2360,8 @@ int DtCarFunction::SaveGateSpecIni()
 	ReplaceTokenA(tplUtf8, "{{FW_POWER_CYCLE}}", v);
 	v.Format("%d", fw.verifyEnabled ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{FW_VERIFY_EN}}", v);
+	v.Format("%d", fw.readSensorIdEnabled ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{FW_READ_SENSOR_ID}}", v);
 
 	const CStringA iniAcp = Utf8ToAcp(tplUtf8, tplUtf8.GetLength());
 	if (!WriteAcpIniFile(path, iniAcp))
@@ -2422,8 +2431,30 @@ void DtCarFunction::ClearLightGateResults()
 	m_bFirmwareBurnInProgress = false;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
 	memset(m_fwBurnErrCode, 0, sizeof(m_fwBurnErrCode));
+	m_bSensorIdHasResult = false;
+	memset(m_bSensorIdReadOk, 0, sizeof(m_bSensorIdReadOk));
+	memset(m_sensorIdHex, 0, sizeof(m_sensorIdHex));
 	m_bFirmwareBurnVerifyHasResult = false;
 	memset(m_bFirmwareBurnVerifyPass, 0, sizeof(m_bFirmwareBurnVerifyPass));
+}
+
+bool DtCarFunction::AnySensorIdReadFailed() const
+{
+	if (!m_gateFirmwareBurn.readSensorIdEnabled || !m_bSensorIdHasResult)
+		return false;
+	for (int d = 0; d < m_iEnumDevNum; d++)
+	{
+		if (!IsDevEnabled(d))
+			continue;
+		for (int v = 0; v < m_iVcNum; v++)
+		{
+			if (!IsVcEnabled(d, v))
+				continue;
+			if (!m_bSensorIdReadOk[d][v])
+				return true;
+		}
+	}
+	return false;
 }
 
 struct DtFirmwareBurnThreadParam
@@ -2434,6 +2465,28 @@ struct DtFirmwareBurnThreadParam
 	GateFirmwareBurnCfg cfg;
 	unsigned char slaveHint;
 };
+
+unsigned __stdcall DtCarFunction::FirmwareSensorIdThreadProc(void* p)
+{
+	DtFirmwareBurnThreadParam* tp = (DtFirmwareBurnThreadParam*)p;
+	if (tp == NULL || tp->fn == NULL)
+		return 1;
+	DtCarFunction* fn = tp->fn;
+	const int dev = tp->devId;
+	const int vc = tp->vcId;
+	Sony031SensorIdResult sr = {};
+	const bool ok = Sony031ReadSensorId(dev, vc, tp->cfg, tp->slaveHint, &sr);
+	fn->m_bSensorIdReadOk[dev][vc] = ok;
+	if (ok)
+		_tcsncpy_s(fn->m_sensorIdHex[dev][vc], sr.sensorIdHex, _TRUNCATE);
+	else
+	{
+		fn->m_sensorIdHex[dev][vc][0] = 0;
+		fn->m_fwBurnErrCode[dev][vc] = sr.errorCode != 0 ? sr.errorCode : 2;
+	}
+	delete tp;
+	return ok ? 0 : 1;
+}
 
 unsigned __stdcall DtCarFunction::FirmwareBurnThreadProc(void* p)
 {
@@ -2621,6 +2674,9 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 	m_bFirmwareBurnInProgress = true;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
 	memset(m_fwBurnErrCode, 0, sizeof(m_fwBurnErrCode));
+	m_bSensorIdHasResult = false;
+	memset(m_bSensorIdReadOk, 0, sizeof(m_bSensorIdReadOk));
+	memset(m_sensorIdHex, 0, sizeof(m_sensorIdHex));
 
 	FirmwareBurnSetProgressTarget(m_hwndFirmwareBurnProgress);
 
@@ -2677,6 +2733,85 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 			MarkEnabledFirmwareBurnFailed(this);
 			return false;
 		}
+	}
+
+	if (m_gateFirmwareBurn.readSensorIdEnabled)
+	{
+		msgUtf8(DtZh::kFwSensorIdStart);
+		m_bSensorIdHasResult = true;
+		std::vector<HANDLE> idThreads;
+		for (int d = 0; d < m_iEnumDevNum; d++)
+		{
+			if (!IsDevEnabled(d))
+				continue;
+			for (int v = 0; v < m_iVcNum; v++)
+			{
+				if (!IsVcEnabled(d, v))
+					continue;
+				DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
+				tp->fn = this;
+				tp->devId = d;
+				tp->vcId = v;
+				tp->cfg = m_gateFirmwareBurn;
+				tp->slaveHint = m_gateTempI2cAddr[d][v];
+				unsigned threadId = 0;
+				HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareSensorIdThreadProc, tp, 0, &threadId);
+				if (h == NULL)
+				{
+					delete tp;
+					msgUtf8(DtZh::kLogFwThreadFail, d, v);
+					Sony031SensorIdResult sr = {};
+					if (!Sony031ReadSensorId(d, v, m_gateFirmwareBurn, m_gateTempI2cAddr[d][v], &sr))
+					{
+						m_bSensorIdReadOk[d][v] = false;
+						m_fwBurnErrCode[d][v] = 2;
+					}
+					else
+					{
+						m_bSensorIdReadOk[d][v] = true;
+						_tcsncpy_s(m_sensorIdHex[d][v], sr.sensorIdHex, _TRUNCATE);
+					}
+					continue;
+				}
+				idThreads.push_back(h);
+			}
+		}
+		for (size_t i = 0; i < idThreads.size(); i++)
+		{
+			WaitForSingleObject(idThreads[i], INFINITE);
+			CloseHandle(idThreads[i]);
+		}
+
+		bool idAllPass = true;
+		for (int d = 0; d < m_iEnumDevNum; d++)
+		{
+			if (!IsDevEnabled(d))
+				continue;
+			for (int v = 0; v < m_iVcNum; v++)
+			{
+				if (!IsVcEnabled(d, v))
+					continue;
+				if (!m_bSensorIdReadOk[d][v])
+					idAllPass = false;
+			}
+		}
+		if (!idAllPass)
+		{
+			msgUtf8(DtZh::kFwSensorIdParallelFail);
+			FirmwareBurnSetProgressTarget(NULL);
+			m_bFirmwareBurnInProgress = false;
+			return false;
+		}
+	}
+	else
+	{
+		msgUtf8(DtZh::kFwSensorIdSkipIni);
+	}
+
+	for (int d = 0; d < m_iEnumDevNum; d++)
+	{
+		if (!IsDevEnabled(d))
+			continue;
 		msgUtf8(DtZh::kLogFwBurnDev, d, d);
 		for (int v = 0; v < m_iVcNum; v++)
 		{
@@ -2955,10 +3090,20 @@ void DtCarFunction::WriteProductionReport(const std::vector<LightTestChannelReco
 	}
 }
 
+static void CopyChannelSensorId(const DtCarFunction* fn, int d, int v, LightTestChannelRecord& rec)
+{
+	if (fn == NULL)
+		return;
+	rec.sensorIdHex.Empty();
+	if (fn->m_bSensorIdHasResult && fn->m_bSensorIdReadOk[d][v] && fn->m_sensorIdHex[d][v][0] != 0)
+		rec.sensorIdHex = fn->m_sensorIdHex[d][v];
+}
+
 static void FillProductionFwFields(DtCarFunction* fn, int d, int v, LightTestChannelRecord& rec)
 {
 	if (fn == NULL)
 		return;
+	CopyChannelSensorId(fn, d, v, rec);
 	rec.fwBurnEnabled = fn->m_gateFirmwareBurn.enabled;
 	rec.fwBurnTested = fn->m_bFirmwareBurnHasResult;
 	rec.okFwBurn = !rec.fwBurnEnabled || !rec.fwBurnTested || fn->m_bFirmwareBurnPass[d][v];
@@ -2992,6 +3137,8 @@ void DtCarFunction::BuildProductionRowsFromFirmware(int failStage,
 			FillProductionFwFields(const_cast<DtCarFunction*>(this), d, v, rec);
 
 			bool chPass = true;
+			if (m_gateFirmwareBurn.readSensorIdEnabled && m_bSensorIdHasResult && !m_bSensorIdReadOk[d][v])
+				chPass = false;
 			if (rec.fwBurnEnabled && rec.fwBurnTested && !rec.okFwBurn)
 				chPass = false;
 			if (failStage == PROD_STAGE_VERIFY
@@ -2999,7 +3146,11 @@ void DtCarFunction::BuildProductionRowsFromFirmware(int failStage,
 				chPass = false;
 
 			rec.overallPass = chPass;
-			rec.failStage = chPass ? PROD_STAGE_OK : failStage;
+			int chStage = failStage;
+			if (!chPass && m_gateFirmwareBurn.readSensorIdEnabled && m_bSensorIdHasResult
+				&& !m_bSensorIdReadOk[d][v])
+				chStage = PROD_STAGE_SENSOR_ID;
+			rec.failStage = chPass ? PROD_STAGE_OK : chStage;
 			if (!chPass)
 				outAllPass = false;
 
@@ -3028,6 +3179,7 @@ static const char* ProductionFailStageZh(int stage)
 	case PROD_STAGE_BURN: return DtZh::kProdStageBurn;
 	case PROD_STAGE_VERIFY: return DtZh::kProdStageVerify;
 	case PROD_STAGE_LIGHT: return DtZh::kProdStageLight;
+	case PROD_STAGE_SENSOR_ID: return DtZh::kProdStageSensorId;
 	default: return DtZh::kStrOk;
 	}
 }

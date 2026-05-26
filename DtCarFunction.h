@@ -195,6 +195,10 @@ public:
 	bool m_bFirmwareBurnVerifyHasResult;
 	bool m_bFirmwareBurnVerifyPass[MAX_CC16 * MAX_DEV][MAX_VC];
 	int m_fwBurnErrCode[MAX_CC16 * MAX_DEV][MAX_VC];
+	bool m_bSensorIdHasResult;
+	bool m_bSensorIdReadOk[MAX_CC16 * MAX_DEV][MAX_VC];
+	TCHAR m_sensorIdHex[MAX_CC16 * MAX_DEV][MAX_VC][21];
+	bool AnySensorIdReadFailed() const;
 	bool PauseWorkThreadsForFirmwareBurn();
 
 	/** Grab one frame and convert to 8-bit gray (thread-safe with WorkProc). */
@@ -249,6 +253,7 @@ protected:
 	void BuildProductionRowsFromFirmware(int failStage, std::vector<LightTestChannelRecord>& outRows, bool& outAllPass) const;
 	void ApplyProductionRowsToUi(const std::vector<LightTestChannelRecord>& rows);
 	static unsigned __stdcall FirmwareBurnThreadProc(void* pParam);
+	static unsigned __stdcall FirmwareSensorIdThreadProc(void* pParam);
 	static unsigned __stdcall FirmwareVerifyThreadProc(void* pParam);
 	static unsigned __stdcall LightGateThreadProc(void* pParam);
 
