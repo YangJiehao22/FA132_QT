@@ -229,6 +229,7 @@ if exist "$(ProjectDir)GateSpec.template.utf8" copy /Y "$(ProjectDir)GateSpec.te
     <ClInclude Include="DtBadPixelDetect.h" />
     <ClInclude Include="DtHotPixelAlgo.h" />
     <ClInclude Include="DtLightTestReport.h" />
+    <ClInclude Include="DtTcpNotify.h" />
     <ClInclude Include="DtCarFunction.h" />
     <ClInclude Include="DtFileOperate.h" />
     <ClInclude Include="DtSpecDlg.h" />
@@ -246,6 +247,7 @@ if exist "$(ProjectDir)GateSpec.template.utf8" copy /Y "$(ProjectDir)GateSpec.te
     <ClCompile Include="DtBadPixelDetect.cpp" />
     <ClCompile Include="DtHotPixelAlgo.cpp" />
     <ClCompile Include="DtLightTestReport.cpp" />
+    <ClCompile Include="DtTcpNotify.cpp" />
     <ClCompile Include="DtCarFunction.cpp" />
     <ClCompile Include="DtFirmwareBurn.cpp" />
     <ClCompile Include="DtSpecDlg.cpp" />

@@ -20,11 +20,13 @@ struct GateFirmwareBurnCfg
 	int postBurnDelayMs;
 	int i2cRateKbps;
 	bool autoDetectSlave;
-	/** FA132: burn by per-VC I2C addr (Dothinkey); false = call SetMipiImageVC before burn. */
+	/** FA132 multi-VC: true = SetMipiImageVC(vc) before flash/SensorID on that lane. */
 	bool useMipiVcForBurn;
 	bool powerCycleAfter;
 	/** After burn + power-cycle: read key regs (Ruibo ReadFlashCalibrationResult). */
 	bool verifyEnabled;
+	/** 1=verify after UnitGrab+InitPower only (FA132 cal experiment); 0=read during capture (UC930 default). */
+	bool verifyBeforeGrab;
 	/** Before burn: read 10 regs @0x7E80 (Ruibo ReadSensorID). */
 	bool readSensorIdEnabled;
 	/** Resolved full path (runtime). */

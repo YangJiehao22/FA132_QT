@@ -1,60 +1,12 @@
-﻿生成启动时间为 2026/5/26 14:14:38。
+﻿生成启动时间为 2026/5/26 18:41:39。
      1>项目“D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\DtSample.vcxproj”在节点 2 上(Build 个目标)。
      1>C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(363,5): warning MSB8004: Intermediate Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Intermediate Directory.
      1>ClCompile:
-         D:\VS2013\VC\bin\x86_amd64\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /GL /D WIN32 /D _WINDOWS /D NDEBUG /D _MBCS /D _AFXDLL /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yu"stdafx.h" /Fp"x64\middle\QtechCalibration.pch" /Fo"x64\middle\\" /Fd"x64\middle\vc120.pdb" /Gd /TP /errorReport:prompt DtCarFunction.cpp DtChannelDlg.cpp DtEncoding.cpp DtFirmwareBurn.cpp DtSampleDlg.cpp DtSpecDlg.cpp
-         DtCarFunction.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtCarFunction.cpp(2112): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtCarFunction.cpp(4171): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-         DtChannelDlg.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-         DtEncoding.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-         DtFirmwareBurn.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-         DtSampleDlg.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtSampleDlg.cpp(603): warning C4102: “update_start_btn”: 未引用的标签
-         DtSpecDlg.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtSpecDlg.cpp(899): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-       Link:
-         D:\VS2013\VC\bin\x86_amd64\link.exe /ERRORREPORT:PROMPT /OUT:"x64\Release\QtechCalibration.exe" /INCREMENTAL:NO /NOLOGO /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /manifestinput:D:\VS2013\VC\Include\Manifest\dpiaware.manifest /DEBUG /PDB:"x64\Release\QtechCalibration.pdb" /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"x64\Release\QtechCalibration.lib" /MACHINE:X64 x64\middle\DtSample.res
-         x64\middle\DtSpecSettings.res
-         x64\middle\DtDpiUi.obj
-         x64\middle\DtEncoding.obj
-         x64\middle\DtBadPixelDetect.obj
-         x64\middle\DtHotPixelAlgo.obj
-         x64\middle\DtLightTestReport.obj
-         x64\middle\DtCarFunction.obj
-         x64\middle\DtFirmwareBurn.obj
-         x64\middle\DtSpecDlg.obj
-         x64\middle\DtChannelDlg.obj
-         x64\middle\DtFileOperate.obj
-         x64\middle\DtSample.obj
-         x64\middle\DtSampleDlg.obj
-         x64\middle\I2CDebug.obj
-         x64\middle\stdafx.obj
-         正在生成代码
-         已完成代码的生成
-         DtSample.vcxproj -> D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\x64\Release\QtechCalibration.exe
-       PostBuildEvent:
-         if exist "x64\Release\DtccmKit64.dll" if not exist "x64\Release\DtccmKit.dll" copy /Y "x64\Release\DtccmKit64.dll" "x64\Release\DtccmKit.dll"
-         if exist "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\..\ezCarTestSample_QT_20250918\x64\Release\ezDtCarDTCCM64.dll" if not exist "x64\Release\ezDtCarDTCCM64.dll" copy /Y "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\..\ezCarTestSample_QT_20250918\x64\Release\ezDtCarDTCCM64.dll" "x64\Release\"
-         if exist "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\..\ezCarTestSample_QT_20250918\x64\Release\DtccmKit64.dll" if not exist "x64\Release\DtccmKit64.dll" copy /Y "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\..\ezCarTestSample_QT_20250918\x64\Release\DtccmKit64.dll" "x64\Release\"
-         if exist "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\..\ezCarTestSample_QT_20250918\x64\Release\dtccm2.dll" if not exist "x64\Release\dtccm2.dll" copy /Y "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\..\ezCarTestSample_QT_20250918\x64\Release\dtccm2.dll" "x64\Release\"
-         if exist "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\GateSpec.template.utf8" copy /Y "D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\GateSpec.template.utf8" "x64\Release\"
-         :VCEnd
-         已复制         1 个文件。
-     1>已完成生成项目“D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\DtSample.vcxproj”(Build 个目标)的操作。
+         D:\VS2013\VC\bin\x86_amd64\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /GL /D WIN32 /D _WINDOWS /D NDEBUG /D _MBCS /D _AFXDLL /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yu"stdafx.h" /Fp"x64\middle\QtechCalibration.pch" /Fo"x64\middle\\" /Fd"x64\middle\vc120.pdb" /Gd /TP /errorReport:prompt DtDpiUi.cpp
+         DtDpiUi.cpp
+     1>DtDpiUi.cpp(1): fatal error C1041: 无法打开程序数据库“d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\x64\middle\vc120.pdb”；如果要将多个 CL.EXE 写入同一个 .PDB 文件，请使用 /FS
+     1>已完成生成项目“D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\DtSample.vcxproj”(Build 个目标)的操作 - 失败。
 
-生成成功。
+生成失败。
 
-已用时间 00:00:03.87
+已用时间 00:00:00.21

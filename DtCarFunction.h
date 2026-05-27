@@ -18,6 +18,8 @@ extern void msg(LPCSTR lpszFmt, ...);
 #define WM_FW_BURN_DONE (WM_USER + 3)
 /** Per-channel burn progress (WPARAM=percent 0..100, LPARAM=MAKELPARAM(vc, dev)). */
 #define WM_FW_BURN_PROGRESS (WM_USER + 4)
+/** Firmware prep worker finished (WPARAM=1 OK / 0 fail, LPARAM=prep generation). */
+#define WM_FW_PREP_DONE (WM_USER + 5)
 
 /** Passed to main dialog for UI-thread carDrawImage (MFC preview HWND). */
 struct DtUiDrawPack
@@ -46,6 +48,7 @@ struct GateChannelLimits
 #include "DtBadPixelDetect.h"
 #include "DtLightTestReport.h"
 #include "DtFirmwareBurn.h"
+#include "DtTcpNotify.h"
 
 /** I2C read + generic formula for sensor temperature (GateSpec.ini [sensor_temp_i2c]). */
 struct GateSensorTempI2c
@@ -123,11 +126,13 @@ public:
 	int     m_specDelayMs;
 	GateChannelLimits m_gateDefault;
 	GateChannelLimits m_gatePerChannel[MAX_CC16 * MAX_DEV][MAX_VC];
-	/** Formula from [sensor_temp_i2c]; per Dev/VC I2C addr from [sensor_temp_i2c_vc] D#_V#. */
+	/** [sensor_temp_i2c] formula; [sensor_temp_i2c_vc] D#_V# = per-lane sensor I2C slave (temp + burn). */
 	GateSensorTempI2c m_gateSensorTempI2c;
 	unsigned char m_gateTempI2cAddr[MAX_CC16 * MAX_DEV][MAX_VC];
 	GateBadPixelDarkCfg m_gateBadPixelDark;
 	GateFirmwareBurnCfg m_gateFirmwareBurn;
+	/** GateSpec.ini [tcp_notify]: TCP client to lighting station (Play after production). */
+	GateTcpNotifyCfg m_gateTcpNotify;
 
 	int LoadIni();
 	int ReadDtCarIni();
@@ -180,6 +185,10 @@ public:
 	    afterStart=false (UI): prep init only, no pause/join; power-cycle stays in DtSampleDlg.
 	    afterStart=true (legacy): capture threads running, PauseWorkThreads before burn. */
 	bool RunFirmwareBurnParallel(bool afterStart = false);
+	/** Before 14-reg verify: drop GrabTab (UnitGrab), InitPower only (FA132 cal read). */
+	bool PrepareForFirmwareVerify();
+	/** After verify while capture was running: re-InitGrab and resume preview. */
+	bool RestoreWorkCaptureAfterVerify();
 	/** Parallel post-burn register verify on enabled Dev/VC (same pattern as burn). */
 	bool RunFirmwareBurnVerifyAll();
 	void SetFirmwareBurnProgressWnd(HWND hwnd) { m_hwndFirmwareBurnProgress = hwnd; }

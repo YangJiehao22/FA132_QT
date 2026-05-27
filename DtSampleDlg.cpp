@@ -21,7 +21,7 @@
 #define TIMER_ID_FW_POWER_OFF 4
 #endif
 
-struct DtFwBurnWorkerParam
+struct DtFwWorkerParam
 {
 	HWND hwnd;
 	DtCarFunction* fn;
@@ -191,7 +191,9 @@ CDtSampleDlg::CDtSampleDlg(CWnd* pParent /*=NULL*/)
 	, m_bOpen(FALSE)
 	, m_bStart(FALSE)
 	, m_cyToolbarBottom(0)
+	, m_hFwPrepThread(NULL)
 	, m_hFwBurnThread(NULL)
+	, m_fwPrepGeneration(0)
 	, m_fwBurnGeneration(0)
 	, m_fwBurnHandledGen((DWORD)-1)
 	, m_bFwPowerCyclePending(FALSE)
@@ -305,6 +307,7 @@ BEGIN_MESSAGE_MAP(CDtSampleDlg, CDialogEx)
     ON_WM_CLOSE()
 	ON_MESSAGE(WM_MSG, OnMsg)
 	ON_MESSAGE(WM_DT_CAR_DRAW, OnDtCarDraw)
+	ON_MESSAGE(WM_FW_PREP_DONE, OnFwPrepDone)
 	ON_MESSAGE(WM_FW_BURN_DONE, OnFwBurnDone)
 	ON_MESSAGE(WM_FW_BURN_PROGRESS, OnFwBurnProgress)
 	ON_BN_CLICKED(IDC_BUTTON_LOAD, &CDtSampleDlg::OnBnClickedButtonLoad)
@@ -569,31 +572,35 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 		m_dtFunction.ReadGateSpecIni();
 		ReSize();
 		const bool fwBurn = m_dtFunction.m_gateFirmwareBurn.enabled;
-		if (fwBurn)
-		{
-			if (!m_dtFunction.StartFirmwarePrep())
-				return;
-		}
-		else if (!m_dtFunction.Start())
-		{
-			return;
-		}
-		m_bStart = TRUE;
-		SetTimer(0, 1000, NULL);
+		const bool fwVerify = m_dtFunction.m_gateFirmwareBurn.verifyEnabled;
 		KillTimer(TIMER_ID_FW_BURN);
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
 		KillTimer(TIMER_ID_FW_POWER_OFF);
 		KillTimer(TIMER_ID_STREAM_GATE);
 		if (fwBurn)
 		{
-			int warmup = m_dtFunction.m_gateFirmwareBurn.fwWarmupMs;
-			if (warmup < 500)
-				warmup = 500;
-			msgUtf8(DtZh::kFwWaitWarmup, warmup);
-			SetTimer(TIMER_ID_FW_BURN, warmup, NULL);
+			++m_fwPrepGeneration;
+			if (!BeginFirmwarePrepAsync())
+				return;
+			m_bStart = TRUE;
+			SetTimer(0, 1000, NULL);
+		}
+		else if (fwVerify)
+		{
+			if (!m_dtFunction.Start())
+				return;
+			m_bStart = TRUE;
+			SetTimer(0, 1000, NULL);
+			ScheduleFirmwareVerifyThenLightTest();
+		}
+		else if (!m_dtFunction.Start())
+		{
+			return;
 		}
 		else
 		{
+			m_bStart = TRUE;
+			SetTimer(0, 1000, NULL);
 			SetTimer(TIMER_ID_STREAM_GATE, m_dtFunction.m_specDelayMs, NULL);
 		}
 	}
@@ -625,7 +632,9 @@ void CDtSampleDlg::OnSize(UINT nType, int cx, int cy)
 
 void CDtSampleDlg::OnClose()
 {
+	++m_fwPrepGeneration;
 	++m_fwBurnGeneration;
+	WaitForFwPrepThread(30000);
 	WaitForFwBurnThread(30000);
     if (m_bOpen)
     {
@@ -709,9 +718,26 @@ BOOL CDtSampleDlg::OnCommand(WPARAM wParam, LPARAM lParam)
     return CDialogEx::OnCommand(wParam, lParam);
 }
 
+unsigned __stdcall CDtSampleDlg::FirmwarePrepWorkerProc(void* param)
+{
+	DtFwWorkerParam* ctx = (DtFwWorkerParam*)param;
+	if (ctx == NULL)
+		return 1;
+	const HWND hwnd = ctx->hwnd;
+	const DWORD gen = ctx->generation;
+	DtCarFunction* fn = ctx->fn;
+	delete ctx;
+	bool ok = false;
+	if (fn != NULL && ::IsWindow(hwnd))
+		ok = (fn->StartFirmwarePrep() != 0);
+	if (::IsWindow(hwnd))
+		::PostMessage(hwnd, WM_FW_PREP_DONE, ok ? 1u : 0u, (LPARAM)gen);
+	return ok ? 0u : 1u;
+}
+
 unsigned __stdcall CDtSampleDlg::FirmwareBurnWorkerProc(void* param)
 {
-	DtFwBurnWorkerParam* ctx = (DtFwBurnWorkerParam*)param;
+	DtFwWorkerParam* ctx = (DtFwWorkerParam*)param;
 	if (ctx == NULL)
 		return 1;
 	const HWND hwnd = ctx->hwnd;
@@ -726,6 +752,18 @@ unsigned __stdcall CDtSampleDlg::FirmwareBurnWorkerProc(void* param)
 	return ok ? 0u : 1u;
 }
 
+void CDtSampleDlg::WaitForFwPrepThread(DWORD timeoutMs)
+{
+	if (m_hFwPrepThread == NULL)
+		return;
+	const DWORD w = WaitForSingleObject(m_hFwPrepThread, timeoutMs);
+	if (w == WAIT_OBJECT_0)
+	{
+		CloseHandle(m_hFwPrepThread);
+		m_hFwPrepThread = NULL;
+	}
+}
+
 void CDtSampleDlg::WaitForFwBurnThread(DWORD timeoutMs)
 {
 	if (m_hFwBurnThread == NULL)
@@ -738,6 +776,28 @@ void CDtSampleDlg::WaitForFwBurnThread(DWORD timeoutMs)
 	}
 }
 
+bool CDtSampleDlg::BeginFirmwarePrepAsync()
+{
+	WaitForFwPrepThread(0);
+	if (m_hFwPrepThread != NULL)
+		return false;
+	WaitForFwBurnThread(0);
+	DtFwWorkerParam* ctx = new DtFwWorkerParam;
+	ctx->hwnd = m_hWnd;
+	ctx->fn = &m_dtFunction;
+	ctx->generation = m_fwPrepGeneration;
+	unsigned tid = 0;
+	m_hFwPrepThread = (HANDLE)_beginthreadex(NULL, 0, &FirmwarePrepWorkerProc, ctx, 0, &tid);
+	if (m_hFwPrepThread == NULL)
+	{
+		delete ctx;
+		msgUtf8(DtZh::kFwPrepAsyncFail);
+		return false;
+	}
+	msgUtf8(DtZh::kFwPrepAsync);
+	return true;
+}
+
 void CDtSampleDlg::BeginFirmwareBurnAsync()
 {
 	WaitForFwBurnThread(0);
@@ -748,7 +808,7 @@ void CDtSampleDlg::BeginFirmwareBurnAsync()
 	ResetFwBurnCellOverlay();
 	++m_fwBurnGeneration;
 	m_fwBurnHandledGen = (DWORD)-1;
-	DtFwBurnWorkerParam* ctx = new DtFwBurnWorkerParam;
+	DtFwWorkerParam* ctx = new DtFwWorkerParam;
 	ctx->hwnd = m_hWnd;
 	ctx->fn = &m_dtFunction;
 	ctx->generation = m_fwBurnGeneration;
@@ -766,6 +826,7 @@ void CDtSampleDlg::BeginFirmwareBurnAsync()
 
 void CDtSampleDlg::StopCaptureForFirmwarePowerCycle()
 {
+	WaitForFwPrepThread(0);
 	WaitForFwBurnThread(0);
 	ClearFwBurnCellOverlay();
 	if (m_bStart)
@@ -781,6 +842,7 @@ void CDtSampleDlg::StopCaptureForFirmwarePowerCycle()
 
 void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 {
+	++m_fwPrepGeneration;
 	KillTimer(0);
 	KillTimer(TIMER_ID_FW_BURN);
 	KillTimer(TIMER_ID_FW_POWER_SETTLE);
@@ -812,6 +874,7 @@ void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 		KillTimer(TIMER_ID_STREAM_GATE);
 	}
 
+	WaitForFwPrepThread(0);
 	WaitForFwBurnThread(0);
 	if (m_bStart)
 	{
@@ -840,7 +903,29 @@ void CDtSampleDlg::ContinueAfterFirmwareBurn(bool burnOk)
 			StopCaptureAndShowResults(FALSE);
 		return;
 	}
-	if (m_dtFunction.m_gateFirmwareBurn.powerCycleAfter)
+	ScheduleFirmwareVerifyThenLightTest();
+}
+
+void CDtSampleDlg::ScheduleFirmwareVerifyThenLightTest()
+{
+	const GateFirmwareBurnCfg& fw = m_dtFunction.m_gateFirmwareBurn;
+	if (!fw.verifyEnabled)
+	{
+		int delay = fw.enabled ? fw.postBurnDelayMs : m_dtFunction.m_specDelayMs;
+		if (fw.enabled && delay < 200)
+			delay = 1000;
+		if (!fw.enabled)
+		{
+			if (!m_dtFunction.Start())
+				return;
+			m_bStart = TRUE;
+			SetTimer(0, 1000, NULL);
+		}
+		SetTimer(TIMER_ID_STREAM_GATE, delay, NULL);
+		return;
+	}
+	/* PowerCycleAfter only after firmware burn; verify-only stays on one Start (no Stop). */
+	if (fw.powerCycleAfter && fw.enabled)
 	{
 		msgUtf8(DtZh::kFwPowerCyclePlan);
 		m_bFwPowerCyclePending = TRUE;
@@ -848,23 +933,48 @@ void CDtSampleDlg::ContinueAfterFirmwareBurn(bool burnOk)
 		SetTimer(TIMER_ID_FW_POWER_OFF, 2000, NULL);
 		return;
 	}
-	/* Verify runs only after power-cycle + settle (Ruibo: Stop 2s, Start 3s, then ReadFlashCalibrationResult). */
-	if (m_dtFunction.m_gateFirmwareBurn.verifyEnabled)
-		msgUtf8(DtZh::kFwVerifyNeedPowerCycle);
-	int delay = m_dtFunction.m_gateFirmwareBurn.postBurnDelayMs;
-	if (delay < 200)
-		delay = 1000;
-	SetTimer(TIMER_ID_STREAM_GATE, delay, NULL);
+	int settleMs = m_dtFunction.m_specDelayMs;
+	if (settleMs < 200)
+		settleMs = 200;
+	if (fw.enabled)
+		msgUtf8(DtZh::kFwPowerSettleWait, settleMs);
+	else
+		msgUtf8(DtZh::kFwVerifySettleNoPc, settleMs);
+	SetTimer(TIMER_ID_FW_POWER_SETTLE, settleMs, NULL);
 }
 
 bool CDtSampleDlg::RunFirmwareBurnVerifyOrStop()
 {
 	const GateFirmwareBurnCfg& fw = m_dtFunction.m_gateFirmwareBurn;
-	if (!fw.enabled || !fw.verifyEnabled)
+	if (!fw.verifyEnabled)
 		return true;
 	m_dtFunction.ReadGateSpecIni();
+
+	const bool usePrep = fw.verifyBeforeGrab;
+	const bool captureWasUp = (m_dtFunction.m_bRunning != FALSE);
+	if (usePrep)
+	{
+		if (captureWasUp)
+			m_dtFunction.RequestStopCapture();
+		if (!m_dtFunction.PrepareForFirmwareVerify())
+		{
+			if (captureWasUp)
+				m_dtFunction.RestoreWorkCaptureAfterVerify();
+			msgUtf8(DtZh::kFwVerifyPrepFail);
+			m_dtFunction.FinalizeProductionRun(PROD_STAGE_VERIFY);
+			SetWindowText(ZH_UTF8(kMainTitleTestNg));
+			if (m_bStart)
+				StopCaptureAndShowResults(FALSE);
+			return false;
+		}
+	}
+
 	msgUtf8(DtZh::kFwVerifyStart);
 	const bool ok = m_dtFunction.RunFirmwareBurnVerifyAll();
+
+	if (usePrep && captureWasUp)
+		m_dtFunction.RestoreWorkCaptureAfterVerify();
+
 	if (!ok)
 	{
 		msgUtf8(DtZh::kFwVerifyFail);
@@ -876,6 +986,39 @@ bool CDtSampleDlg::RunFirmwareBurnVerifyOrStop()
 	}
 	msgUtf8(DtZh::kFwVerifyOk);
 	return true;
+}
+
+LRESULT CDtSampleDlg::OnFwPrepDone(WPARAM wParam, LPARAM lParam)
+{
+	WaitForFwPrepThread(0);
+	const DWORD gen = (DWORD)lParam;
+	if (gen != m_fwPrepGeneration)
+		return 0;
+	if (!m_bStart)
+		return 0;
+
+	const bool prepOk = (wParam != 0);
+	if (!prepOk)
+	{
+		msgUtf8(DtZh::kFwPrepAsyncFail);
+		++m_fwPrepGeneration;
+		m_bStart = FALSE;
+		KillTimer(0);
+		KillTimer(TIMER_ID_FW_BURN);
+		if (m_btnStart.GetSafeHwnd())
+			m_btnStart.SetWindowText(_T("Start"));
+		else if (GetDlgItem(IDC_BUTTON_START))
+			GetDlgItem(IDC_BUTTON_START)->SetWindowText(_T("Start"));
+		UpdatePrimaryButtonLooks();
+		return 0;
+	}
+
+	int warmup = m_dtFunction.m_gateFirmwareBurn.fwWarmupMs;
+	if (warmup < 500)
+		warmup = 500;
+	msgUtf8(DtZh::kFwWaitWarmup, warmup);
+	SetTimer(TIMER_ID_FW_BURN, warmup, NULL);
+	return 0;
 }
 
 LRESULT CDtSampleDlg::OnFwBurnDone(WPARAM wParam, LPARAM lParam)
@@ -1207,28 +1350,42 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 		m_bStart = TRUE;
 		ClearFwBurnCellOverlay();
 		SetTimer(0, 1000, NULL);
-		int warmup = m_dtFunction.m_gateFirmwareBurn.fwWarmupMs;
-		if (warmup < 500)
-			warmup = 3000;
-		msgUtf8(DtZh::kFwPowerSettleWait, warmup);
+		int settleMs = m_dtFunction.m_specDelayMs;
+		if (settleMs < 200)
+			settleMs = 200;
+		msgUtf8(DtZh::kFwPowerSettleWait, settleMs);
 		if (m_btnStart.GetSafeHwnd())
 			m_btnStart.SetWindowText(_T("Stop"));
 		else if (GetDlgItem(IDC_BUTTON_START))
 			GetDlgItem(IDC_BUTTON_START)->SetWindowText(_T("Stop"));
 		UpdatePrimaryButtonLooks();
-		SetTimer(TIMER_ID_FW_POWER_SETTLE, warmup, NULL);
+		SetTimer(TIMER_ID_FW_POWER_SETTLE, settleMs, NULL);
 	}
 	else if (nIDEvent == TIMER_ID_FW_POWER_SETTLE)
 	{
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
-		if (!m_bStart)
+		if (!m_bStart && !m_dtFunction.m_gateFirmwareBurn.verifyEnabled)
 			return;
 		if (!RunFirmwareBurnVerifyOrStop())
 			return;
-		int delay = m_dtFunction.m_gateFirmwareBurn.postBurnDelayMs;
-		if (delay < 200)
-			delay = 1000;
-		SetTimer(TIMER_ID_STREAM_GATE, delay, NULL);
+		if (m_dtFunction.m_bRunning == FALSE)
+		{
+			if (!m_dtFunction.Start())
+			{
+				msgUtf8(DtZh::kLogPwCycleStartFail);
+				return;
+			}
+			m_bStart = TRUE;
+			ClearFwBurnCellOverlay();
+			SetTimer(0, 1000, NULL);
+			if (m_btnStart.GetSafeHwnd())
+				m_btnStart.SetWindowText(_T("Stop"));
+			else if (GetDlgItem(IDC_BUTTON_START))
+				GetDlgItem(IDC_BUTTON_START)->SetWindowText(_T("Stop"));
+			UpdatePrimaryButtonLooks();
+		}
+		/* DelayMs already waited before verify; go to light test immediately. */
+		SetTimer(TIMER_ID_STREAM_GATE, 0, NULL);
 	}
 	else if (nIDEvent == TIMER_ID_STREAM_GATE)
 	{

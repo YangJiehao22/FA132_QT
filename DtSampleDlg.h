@@ -90,22 +90,30 @@ public:
 
 	UINT m_uWndCtrlID[MAX_CC16 * MAX_DEV][MAX_VC];
 
-	/** Async firmware burn (UI thread must not call RunFirmwareBurnParallel). */
+	/** Async firmware prep / burn (UI thread must not block on InitGrab or burn). */
+	HANDLE m_hFwPrepThread;
 	HANDLE m_hFwBurnThread;
+	DWORD m_fwPrepGeneration;
 	DWORD m_fwBurnGeneration;
 	DWORD m_fwBurnHandledGen;
 	BOOL m_bFwPowerCyclePending;
 	BOOL m_bPreviewFrozen;
 
+	void WaitForFwPrepThread(DWORD timeoutMs);
 	void WaitForFwBurnThread(DWORD timeoutMs);
+	bool BeginFirmwarePrepAsync();
 	void BeginFirmwareBurnAsync();
 	void ContinueAfterFirmwareBurn(bool burnOk);
+	/** After Start or post-burn: optional power-cycle, 14-reg verify, then light test. */
+	void ScheduleFirmwareVerifyThenLightTest();
 	bool RunFirmwareBurnVerifyOrStop();
 	void StopCaptureForFirmwarePowerCycle();
 	void StopCaptureAndShowResults(bool forFwPowerCycle);
+	afx_msg LRESULT OnFwPrepDone(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnFwBurnDone(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnFwBurnProgress(WPARAM wParam, LPARAM lParam);
 
+	static unsigned __stdcall FirmwarePrepWorkerProc(void* param);
 	static unsigned __stdcall FirmwareBurnWorkerProc(void* param);
 
 	void ClearFwBurnCellOverlay(bool invalidateCells = true);

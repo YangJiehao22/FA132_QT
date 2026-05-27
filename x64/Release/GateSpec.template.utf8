@@ -31,7 +31,7 @@ Divisor={{TEMP_DIV}}
 Offset={{TEMP_OFF}}
 
 [sensor_temp_i2c_vc]
-; FA132 最多 8 设备 x 4 VC，键名 D{0..7}_V{0..3}，与主界面预览格一致
+; FA132 每路 Sensor I2C 从机地址 D{0..7}_V{0..3}（光测温度 + 烧录/SensorID 共用；须配合 UseMipiVcForBurn=1）
 D0_V0=0x34
 D0_V1=0x84
 D0_V2=0x86
@@ -102,20 +102,39 @@ SaveDir={{BP_DIR}}
 [firmware_burn]
 ; Sony ISX031：与睿博一致 exe\FlashData\031{FovType}.bin（512KB）
 ; 须先 Open 再 Start；烧录前仅 I2C/上电 init，不抓图；FwWarmupMs 后再烧录
-; Enabled=1 开启；烧录 NG 则 Stop，不进入 LightTest
+; Enabled=1 开启烧录；烧录 NG 则 Stop，不进入 LightTest
 Enabled={{FW_EN}}
+; VerifyEnabled=1 开启 14 寄存器标定校验（与 Enabled 无关；须 Open+Start）
 ; ReadSensorIdEnabled=1 烧录前并行读 SensorID(0x7E80x10)；=0 关闭
 ReadSensorIdEnabled={{FW_READ_SENSOR_ID}}
 ; FovType: RABOB065200 | RABOM826200 | RABOM826100 | RABOM82660Flip | RABOM82660
 FovType={{FW_FOV_TYPE}}
 FovTypeIndex={{FW_FOV_INDEX}}
 FlashDataDir={{FW_FLASH_DIR}}
-; FwWarmupMs: 烧录前稳定等待(ms)，不要求出图；上电后二次 Start 仍用此项做 settle
+; FwWarmupMs: 仅烧录前稳定等待(ms)，Prep 完成后、写 Flash 之前
 FwWarmupMs={{FW_WARMUP_MS}}
-; PostBurnDelayMs: 烧录检验 PASS 后到 LightTest 的等待(ms)；此前已完成下电/上电/FwWarmup/14寄存器检验
+; PostBurnDelayMs: 保留项；校验前等待已改用 [timing] DelayMs，校验通过后直接光测
 PostBurnDelayMs={{FW_POST_BURN_MS}}
 I2cRateKbps={{FW_I2C_RATE}}
 AutoDetectSlave={{FW_AUTO_SLAVE}}
+; UseMipiVcForBurn=1: 多 VC 烧录/SensorID 前 SetMipiImageVC，再按上表从机地址访问该路 Sensor
+UseMipiVcForBurn={{FW_USE_MIPI_VC}}
+; PowerCycleAfter=1: only after burn (Enabled=1); verify-only (Enabled=0) never power-cycles
 PowerCycleAfter={{FW_POWER_CYCLE}}
-; VerifyEnabled: after burn, Stop 2s + Start + FwWarmupMs, then 14-reg check (needs PowerCycleAfter=1)
+; VerifyEnabled: 14-reg cal; settle/光测前等待均用 [timing] DelayMs（非 FwWarmupMs）
 VerifyEnabled={{FW_VERIFY_EN}}
+; VerifyBeforeGrab=0: read during capture (UC930); =1: InitPower only before read (FA132 experiment)
+VerifyBeforeGrab={{FW_VERIFY_BEFORE_GRAB}}
+
+[tcp_notify]
+; TCP Client: after all VC tests + Production_report.csv, one Play cmd {"Order":"Play","SNList":[]}\n
+Enabled={{TCP_EN}}
+PeerHost={{TCP_HOST}}
+PeerPort={{TCP_PORT}}
+; OnlyOnOverallOk=1: send only when overall PASS
+OnlyOnOverallOk={{TCP_ONLY_OK}}
+ConnectTimeoutMs={{TCP_CONN_MS}}
+SendTimeoutMs={{TCP_SEND_MS}}
+WaitResponse={{TCP_WAIT_RESP}}
+RecvTimeoutMs={{TCP_RECV_MS}}
+RetryCount={{TCP_RETRY}}

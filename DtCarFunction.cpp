@@ -93,10 +93,11 @@ static GateFirmwareBurnCfg GateDefaultFirmwareBurn()
 	c.postBurnDelayMs = 1000;
 	c.binPath[0] = 0;
 	c.i2cRateKbps = 800;
-	c.autoDetectSlave = false;
-	c.useMipiVcForBurn = false;
+	c.autoDetectSlave = true;
+	c.useMipiVcForBurn = true;
 	c.powerCycleAfter = true;
 	c.verifyEnabled = true;
+	c.verifyBeforeGrab = false;
 	c.readSensorIdEnabled = true;
 	return c;
 }
@@ -135,6 +136,7 @@ static void GateIniFillFirmwareBurn(LPCTSTR path, const GateFirmwareBurnCfg& fb,
 	out->useMipiVcForBurn = (GateIniInt(path, sec, _T("UseMipiVcForBurn"), fb.useMipiVcForBurn ? 1 : 0) != 0);
 	out->powerCycleAfter = (GateIniInt(path, sec, _T("PowerCycleAfter"), fb.powerCycleAfter ? 1 : 0) != 0);
 	out->verifyEnabled = (GateIniInt(path, sec, _T("VerifyEnabled"), fb.verifyEnabled ? 1 : 0) != 0);
+	out->verifyBeforeGrab = (GateIniInt(path, sec, _T("VerifyBeforeGrab"), fb.verifyBeforeGrab ? 1 : 0) != 0);
 	out->readSensorIdEnabled = (GateIniInt(path, sec, _T("ReadSensorIdEnabled"), fb.readSensorIdEnabled ? 1 : 0) != 0);
 	out->binPath[0] = 0;
 	ResolveFirmwareBinPath(*out, out->binPath);
@@ -1684,6 +1686,7 @@ DtCarFunction::DtCarFunction()
 			m_fwBurnPct[d][v] = kFwBurnPctInactive;
 	m_gateBadPixelDark = GateDefaultBadPixelDark();
 	m_gateFirmwareBurn = GateDefaultFirmwareBurn();
+	m_gateTcpNotify = GateDefaultTcpNotify();
 	for (int d = 0; d < MAX_CC16 * MAX_DEV; d++)
 		InitializeCriticalSection(&m_csBurnDev[d]);
 
@@ -2071,12 +2074,18 @@ int DtCarFunction::ReadGateSpecIni()
 	GateIniFillTempI2cAddrGrid(m_strGateSpecIniPath, m_gateTempI2cAddr);
 	GateIniFillBadPixelDark(m_strGateSpecIniPath, GateDefaultBadPixelDark(), &m_gateBadPixelDark);
 	GateIniFillFirmwareBurn(m_strGateSpecIniPath, GateDefaultFirmwareBurn(), &m_gateFirmwareBurn);
+	/* [tcp_notify] PeerHost/PeerPort -> lighting station TCP (see DtTcpNotify.cpp) */
+	GateIniFillTcpNotify(m_strGateSpecIniPath, GateDefaultTcpNotify(), &m_gateTcpNotify);
 	{
 		CStringA pathA(m_strGateSpecIniPath);
 		msgUtf8(DtZh::kLogGateSpecFw,
 			m_gateFirmwareBurn.enabled ? 1 : 0,
 			m_gateFirmwareBurn.readSensorIdEnabled ? 1 : 0,
 			(LPCSTR)pathA);
+		CStringA hostA(m_gateTcpNotify.peerHost);
+		msgUtf8(DtZh::kLogGateSpecTcp,
+			m_gateTcpNotify.enabled ? 1 : 0,
+			hostA.GetString(), m_gateTcpNotify.peerPort);
 	}
 	return 1;
 }
@@ -2360,8 +2369,33 @@ int DtCarFunction::SaveGateSpecIni()
 	ReplaceTokenA(tplUtf8, "{{FW_POWER_CYCLE}}", v);
 	v.Format("%d", fw.verifyEnabled ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{FW_VERIFY_EN}}", v);
+	v.Format("%d", fw.verifyBeforeGrab ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{FW_VERIFY_BEFORE_GRAB}}", v);
 	v.Format("%d", fw.readSensorIdEnabled ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{FW_READ_SENSOR_ID}}", v);
+
+	/* SaveGateSpecIni: [tcp_notify] tokens for GateSpec.template.utf8 */
+	const GateTcpNotifyCfg& tn = m_gateTcpNotify;
+	v.Format("%d", tn.enabled ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{TCP_EN}}", v);
+	{
+		CStringA hostA(tn.peerHost);
+		ReplaceTokenA(tplUtf8, "{{TCP_HOST}}", hostA);
+	}
+	v.Format("%d", tn.peerPort);
+	ReplaceTokenA(tplUtf8, "{{TCP_PORT}}", v);
+	v.Format("%d", tn.onlyOnOverallOk ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{TCP_ONLY_OK}}", v);
+	v.Format("%d", tn.connectTimeoutMs);
+	ReplaceTokenA(tplUtf8, "{{TCP_CONN_MS}}", v);
+	v.Format("%d", tn.sendTimeoutMs);
+	ReplaceTokenA(tplUtf8, "{{TCP_SEND_MS}}", v);
+	v.Format("%d", tn.retryCount);
+	ReplaceTokenA(tplUtf8, "{{TCP_RETRY}}", v);
+	v.Format("%d", tn.waitResponse ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{TCP_WAIT_RESP}}", v);
+	v.Format("%d", tn.recvTimeoutMs);
+	ReplaceTokenA(tplUtf8, "{{TCP_RECV_MS}}", v);
 
 	const CStringA iniAcp = Utf8ToAcp(tplUtf8, tplUtf8.GetLength());
 	if (!WriteAcpIniFile(path, iniAcp))
@@ -2894,9 +2928,60 @@ static void LogFirmwareVerifySummary(DtCarFunction* fn, bool allPass)
 	}
 }
 
+bool DtCarFunction::PrepareForFirmwareVerify()
+{
+	if (m_iEnumDevNum <= 0)
+	{
+		msgUtf8(DtZh::kFwNeedOpen);
+		return false;
+	}
+
+	for (int i = 0; i < m_iEnumDevNum; i++)
+	{
+		if (!IsDevEnabled(i))
+			continue;
+		UninitWorkCapture(i);
+	}
+
+	bool allOk = true;
+	for (int i = 0; i < m_iEnumDevNum; i++)
+	{
+		if (!IsDevEnabled(i) || !m_grabTabValid[i])
+			continue;
+		const int iRet = ::carInitPower(i);
+		msgUtf8(DtZh::kLogDevInitPower, i, iRet);
+		if (iRet != DT_ERROR_OK)
+		{
+			allOk = false;
+			m_workPowerReady[i] = false;
+			m_workGrabReady[i] = false;
+			continue;
+		}
+		m_workPowerReady[i] = true;
+		m_workGrabReady[i] = false;
+	}
+
+	msgUtf8(DtZh::kFwVerifyPrepPower);
+	return allOk;
+}
+
+bool DtCarFunction::RestoreWorkCaptureAfterVerify()
+{
+	m_bSuppressWorkDraw = false;
+	bool allOk = true;
+	for (int i = 0; i < m_iEnumDevNum; i++)
+	{
+		if (!IsDevEnabled(i) || !m_grabTabValid[i])
+			continue;
+		if (!InitWorkCapture(i))
+			allOk = false;
+	}
+	return allOk;
+}
+
 bool DtCarFunction::RunFirmwareBurnVerifyAll()
 {
-	if (!m_gateFirmwareBurn.enabled || !m_gateFirmwareBurn.verifyEnabled)
+	if (!m_gateFirmwareBurn.verifyEnabled)
 		return true;
 
 	if (m_iEnumDevNum <= 0)
@@ -3108,7 +3193,7 @@ static void FillProductionFwFields(DtCarFunction* fn, int d, int v, LightTestCha
 	rec.fwBurnTested = fn->m_bFirmwareBurnHasResult;
 	rec.okFwBurn = !rec.fwBurnEnabled || !rec.fwBurnTested || fn->m_bFirmwareBurnPass[d][v];
 	rec.fwBurnErrCode = fn->m_fwBurnErrCode[d][v];
-	rec.fwVerifyEnabled = fn->m_gateFirmwareBurn.enabled && fn->m_gateFirmwareBurn.verifyEnabled;
+	rec.fwVerifyEnabled = fn->m_gateFirmwareBurn.verifyEnabled;
 	rec.fwVerifyTested = fn->m_bFirmwareBurnVerifyHasResult;
 	rec.okFwVerify = !rec.fwVerifyEnabled || !rec.fwVerifyTested || fn->m_bFirmwareBurnVerifyPass[d][v];
 }
@@ -3209,6 +3294,9 @@ bool DtCarFunction::FinalizeProductionRun(int failStage,
 		msgUtf8(DtZh::kProdSummaryOk);
 	else
 		msgUtf8(DtZh::kProdSummaryNg, ProductionFailStageZh(summaryStage));
+
+	/* After CSV: async Play to PeerHost (NG still sends unless OnlyOnOverallOk=1) */
+	TcpNotifyPostTestDoneAsync(m_gateTcpNotify, allPass);
 
 	return allPass;
 }
@@ -3810,8 +3898,7 @@ static bool RunLightGateOneChannel(DtCarFunction* fn, int d, int v,
 
 	const bool okFwBurn = (!fn->m_gateFirmwareBurn.enabled || !fn->m_bFirmwareBurnHasResult
 		|| fn->m_bFirmwareBurnPass[d][v]);
-	const bool okFwVerify = (!fn->m_gateFirmwareBurn.enabled
-		|| !fn->m_gateFirmwareBurn.verifyEnabled
+	const bool okFwVerify = (!fn->m_gateFirmwareBurn.verifyEnabled
 		|| !fn->m_bFirmwareBurnVerifyHasResult
 		|| fn->m_bFirmwareBurnVerifyPass[d][v]);
 	const bool okFw = okFwBurn && okFwVerify;
@@ -4342,6 +4429,22 @@ void DtCarFunction::RequestStopCapture()
 	}
 }
 
+struct DtFirmwarePrepThreadParam
+{
+	DtCarFunction* fn;
+	int devId;
+	volatile bool ok;
+};
+
+static unsigned __stdcall FirmwarePrepDevThreadProc(void* p)
+{
+	DtFirmwarePrepThreadParam* tp = (DtFirmwarePrepThreadParam*)p;
+	if (tp == NULL || tp->fn == NULL)
+		return 1;
+	tp->ok = tp->fn->InitWorkCapture(tp->devId);
+	return tp->ok ? 0 : 1;
+}
+
 int DtCarFunction::StartFirmwarePrep()
 {
 	m_bRunning = FALSE;
@@ -4358,23 +4461,77 @@ int DtCarFunction::StartFirmwarePrep()
 	ResetPreviewDisplay();
 	InitAllPreviewDisplays();
 
-	int started = 0;
+	std::vector<DtFirmwarePrepThreadParam*> params;
+	std::vector<HANDLE> threads;
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
 		if (!IsDevEnabled(i) || !m_grabTabValid[i])
 			continue;
-		if (!InitWorkCapture(i))
+		DtFirmwarePrepThreadParam* tp = new DtFirmwarePrepThreadParam;
+		tp->fn = this;
+		tp->devId = i;
+		tp->ok = false;
+		unsigned tid = 0;
+		HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &FirmwarePrepDevThreadProc, tp, 0, &tid);
+		if (h == NULL)
 		{
+			delete tp;
 			msgUtf8(DtZh::kFwPrepDevInitFail, i);
-			for (int j = 0; j < m_iEnumDevNum; j++)
+			if (!InitWorkCapture(i))
 			{
-				if (!IsDevEnabled(j))
-					continue;
-				UninitWorkCapture(j);
+				for (size_t t = 0; t < threads.size(); t++)
+				{
+					WaitForSingleObject(threads[t], INFINITE);
+					CloseHandle(threads[t]);
+				}
+				for (size_t t = 0; t < params.size(); t++)
+					delete params[t];
+				for (int j = 0; j < m_iEnumDevNum; j++)
+				{
+					if (!IsDevEnabled(j))
+						continue;
+					UninitWorkCapture(j);
+				}
+				return 0;
 			}
-			return 0;
+			continue;
 		}
-		started++;
+		threads.push_back(h);
+		params.push_back(tp);
+	}
+
+	for (size_t t = 0; t < threads.size(); t++)
+	{
+		WaitForSingleObject(threads[t], INFINITE);
+		CloseHandle(threads[t]);
+	}
+
+	int started = 0;
+	bool allOk = true;
+	for (size_t t = 0; t < params.size(); t++)
+	{
+		DtFirmwarePrepThreadParam* tp = params[t];
+		if (tp == NULL)
+			continue;
+		if (!tp->ok)
+		{
+			allOk = false;
+			msgUtf8(DtZh::kFwPrepDevInitFail, tp->devId);
+		}
+		else
+			started++;
+		delete tp;
+	}
+
+	if (!allOk)
+	{
+		for (int j = 0; j < m_iEnumDevNum; j++)
+		{
+			if (!IsDevEnabled(j))
+				continue;
+			UninitWorkCapture(j);
+		}
+		return 0;
 	}
 	if (started <= 0)
 	{
