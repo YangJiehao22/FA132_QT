@@ -101,6 +101,7 @@ static GateFirmwareBurnCfg GateDefaultFirmwareBurn()
 	c.verifyEnabled = true;
 	c.verifyBeforeGrab = false;
 	c.readSensorIdEnabled = true;
+	c.grabIniAfterPowerCycle[0] = 0;
 	return c;
 }
 
@@ -144,6 +145,14 @@ static void GateIniFillFirmwareBurn(LPCTSTR path, const GateFirmwareBurnCfg& fb,
 	out->verifyEnabled = (GateIniInt(path, sec, _T("VerifyEnabled"), fb.verifyEnabled ? 1 : 0) != 0);
 	out->verifyBeforeGrab = (GateIniInt(path, sec, _T("VerifyBeforeGrab"), fb.verifyBeforeGrab ? 1 : 0) != 0);
 	out->readSensorIdEnabled = (GateIniInt(path, sec, _T("ReadSensorIdEnabled"), fb.readSensorIdEnabled ? 1 : 0) != 0);
+	{
+		CString grabIni = GetIniFileString(sec, _T("GrabIniAfterPowerCycle"), _T(""), path);
+		grabIni.Trim();
+		if (grabIni.IsEmpty())
+			out->grabIniAfterPowerCycle[0] = 0;
+		else
+			_tcsncpy_s(out->grabIniAfterPowerCycle, grabIni, _TRUNCATE);
+	}
 	out->binPath[0] = 0;
 	ResolveFirmwareBinPath(*out, out->binPath);
 }
@@ -1676,6 +1685,8 @@ DtCarFunction::DtCarFunction()
 	memset(m_grabTabValid, 0, sizeof(m_grabTabValid));
 	memset(m_grabTab, 0, sizeof(m_grabTab));
 	m_specDelayMs = 2000;
+	m_dwProductionRunStartTick = 0;
+	m_bProductionRunActive = FALSE;
 	m_bLightGateHasResult = false;
 	memset(m_bLightGatePass, 0, sizeof(m_bLightGatePass));
 	m_bFirmwareBurnHasResult = false;
@@ -2387,6 +2398,22 @@ int DtCarFunction::SaveGateSpecIni()
 	ReplaceTokenA(tplUtf8, "{{FW_VERIFY_BEFORE_GRAB}}", v);
 	v.Format("%d", fw.readSensorIdEnabled ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{FW_READ_SENSOR_ID}}", v);
+	{
+		CStringA grabA;
+#ifdef _UNICODE
+		const int grabLen = (int)_tcslen(fw.grabIniAfterPowerCycle);
+		const int grabAcpLen = WideCharToMultiByte(CP_ACP, 0, fw.grabIniAfterPowerCycle, grabLen, NULL, 0, NULL, NULL);
+		if (grabAcpLen > 0)
+		{
+			LPSTR p = grabA.GetBuffer(grabAcpLen);
+			WideCharToMultiByte(CP_ACP, 0, fw.grabIniAfterPowerCycle, grabLen, p, grabAcpLen, NULL, NULL);
+			grabA.ReleaseBuffer(grabAcpLen);
+		}
+#else
+		grabA = fw.grabIniAfterPowerCycle;
+#endif
+		ReplaceTokenA(tplUtf8, "{{FW_GRAB_INI_AFTER_PC}}", grabA);
+	}
 
 	/* SaveGateSpecIni: [tcp_notify] tokens for GateSpec.template.utf8 */
 	const GateTcpNotifyCfg& tn = m_gateTcpNotify;
@@ -3329,6 +3356,97 @@ static const char* ProductionFailStageZh(int stage)
 	}
 }
 
+static void BuildEnabledChannelsSummaryA(const DtCarFunction* fn, CStringA& out)
+{
+	out.Empty();
+	if (fn == NULL)
+		return;
+	bool any = false;
+	for (int d = 0; d < fn->m_iEnumDevNum; d++)
+	{
+		if (!fn->IsDevEnabled(d))
+			continue;
+		CStringA devPart;
+		devPart.Format("D%d:", d);
+		bool devAny = false;
+		for (int v = 0; v < fn->m_iVcNum; v++)
+		{
+			if (!fn->IsVcEnabled(d, v))
+				continue;
+			if (devAny)
+				devPart += ",";
+			CStringA vcA;
+			vcA.Format("V%d", v);
+			devPart += vcA;
+			devAny = true;
+		}
+		if (!devAny)
+			continue;
+		if (any)
+			out += ";";
+		out += devPart;
+		any = true;
+	}
+	if (!any)
+		out = "none";
+}
+
+void DtCarFunction::LogProductionRunStart()
+{
+	m_dwProductionRunStartTick = GetTickCount();
+	m_bProductionRunActive = TRUE;
+
+	const CTime now = CTime::GetCurrentTime();
+	CStringA chA;
+	BuildEnabledChannelsSummaryA(this, chA);
+
+	const GateFirmwareBurnCfg& fw = m_gateFirmwareBurn;
+	msgUtf8(DtZh::kProdRunBannerStart);
+	msgUtf8(DtZh::kProdRunDetailStart,
+		now.GetYear(), now.GetMonth(), now.GetDay(),
+		now.GetHour(), now.GetMinute(), now.GetSecond(),
+		(LPCSTR)chA,
+		fw.enabled ? 1 : 0,
+		fw.verifyEnabled ? 1 : 0,
+		fw.readSensorIdEnabled ? 1 : 0,
+		m_specDelayMs,
+		fw.fwWarmupMs);
+	if (m_strGateSpecIniPath.GetLength() > 0)
+	{
+		CStringA iniA(m_strGateSpecIniPath);
+		msgUtf8(DtZh::kProdRunIniPath, (LPCSTR)iniA);
+	}
+}
+
+void DtCarFunction::LogProductionRunEnd(int failStage, bool allPass)
+{
+	if (!m_bProductionRunActive)
+		return;
+	m_bProductionRunActive = FALSE;
+
+	DWORD elapsedSec = 0;
+	const DWORD nowTick = GetTickCount();
+	if (m_dwProductionRunStartTick != 0 && nowTick >= m_dwProductionRunStartTick)
+		elapsedSec = (nowTick - m_dwProductionRunStartTick) / 1000;
+
+	int summaryStage = failStage;
+	if (allPass)
+		summaryStage = PROD_STAGE_OK;
+	else if (summaryStage == PROD_STAGE_OK)
+		summaryStage = PROD_STAGE_LIGHT;
+
+	const char* resultS = allPass ? DtZh::kStrOk : DtZh::kStrNg;
+	const char* stageS = ProductionFailStageZh(summaryStage);
+	msgUtf8(DtZh::kProdRunBannerEnd, resultS, stageS, (int)elapsedSec);
+
+	if (!m_lightTestSessionDir.IsEmpty())
+	{
+		CString csvPath = m_lightTestSessionDir + _T("Production_report.csv");
+		CStringA csvA(csvPath);
+		msgUtf8(DtZh::kProdRunCsvPath, (LPCSTR)csvA);
+	}
+}
+
 bool DtCarFunction::FinalizeProductionRun(int failStage)
 {
 	std::vector<LightTestChannelRecord> rows;
@@ -3354,6 +3472,8 @@ bool DtCarFunction::FinalizeProductionRun(int failStage,
 		msgUtf8(DtZh::kProdSummaryOk);
 	else
 		msgUtf8(DtZh::kProdSummaryNg, ProductionFailStageZh(summaryStage));
+
+	LogProductionRunEnd(summaryStage, allPass);
 
 	/* After CSV: async Play to PeerHost (NG still sends unless OnlyOnOverallOk=1) */
 	TcpNotifyPostTestDoneAsync(m_gateTcpNotify, allPass);
@@ -4467,6 +4587,65 @@ void DtCarFunction::UninitWorkCapture(int devId)
 		::carUnitPower(devId);
 		m_workPowerReady[devId] = false;
 	}
+}
+
+bool DtCarFunction::ReloadGrabParaAfterPowerCycle()
+{
+	const TCHAR* iniPath = m_gateFirmwareBurn.grabIniAfterPowerCycle;
+	if (iniPath == NULL || iniPath[0] == 0)
+	{
+		msgUtf8(DtZh::kFwGrabIniAfterPcSkip);
+		return true;
+	}
+	if (::GetFileAttributes(iniPath) == INVALID_FILE_ATTRIBUTES)
+	{
+		CStringA pathA(iniPath);
+		msgUtf8(DtZh::kFwGrabIniAfterPcMissing, (LPCSTR)pathA);
+		return false;
+	}
+
+	CStringA pathLog(iniPath);
+	msgUtf8(DtZh::kFwGrabIniReloadBegin, (LPCSTR)pathLog);
+
+	int okCount = 0;
+	int failCount = 0;
+	for (int i = 0; i < m_iEnumDevNum; i++)
+	{
+		if (!IsDevEnabled(i))
+			continue;
+		if (m_workGrabReady[i])
+		{
+			::carUnitGrab(i);
+			m_workGrabReady[i] = false;
+		}
+		const int iRet = ::carLoadGrabPara(iniPath, i);
+		if (iRet != DT_ERROR_OK)
+		{
+			msgUtf8(DtZh::kFwGrabIniReloadDevFail, i, iRet);
+			m_grabTabValid[i] = false;
+			failCount++;
+			continue;
+		}
+		GrabTab tab = {};
+		const int gRet = ::carGetGrabPara(&tab, i);
+		if (gRet != DT_ERROR_OK)
+		{
+			msgUtf8(DtZh::kFwGrabIniReloadDevFail, i, gRet);
+			m_grabTabValid[i] = false;
+			failCount++;
+			continue;
+		}
+		m_grabTab[i] = tab;
+		m_grabTabValid[i] = true;
+		okCount++;
+		msgUtf8(DtZh::kFwGrabIniReloadDevOk, i);
+	}
+
+	if (okCount <= 0)
+		return false;
+	if (failCount == 0)
+		msgUtf8(DtZh::kFwGrabIniReloadOk, okCount);
+	return true;
 }
 
 // Burn prep: power/grab init on UI thread, no WorkProc (no YUV before flash).

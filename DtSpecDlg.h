@@ -78,6 +78,9 @@ protected:
 	CEdit m_edFwWarmup;
 	CStatic m_lblFwPath;
 	CStatic m_stFwPath;
+	CStatic m_lblFwGrabIni;
+	CEdit m_edFwGrabIni;
+	CButton m_btnFwGrabBrowse;
 	CStatic m_stFwHint;
 	CStatic m_lblDelay;
 	CEdit m_edDelay;
@@ -150,6 +153,7 @@ protected:
 	int LayoutFirmwarePage(const CRect& viewport, double scale, bool bShow);
 	void FillFirmwareFovCombo();
 	void UpdateFirmwarePathLabel();
+	afx_msg void OnBnClickedBtnFwGrabBrowse();
 	afx_msg void OnCbnSelchangeFwFov();
 	afx_msg LRESULT OnDpiChanged(WPARAM wParam, LPARAM lParam);
 	void UpdateBadPixelLabels();

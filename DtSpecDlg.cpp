@@ -256,6 +256,9 @@ void CDtSpecDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT_SPEC_FW_WARMUP, m_edFwWarmup);
 	DDX_Control(pDX, IDC_LBL_SPEC_FW_PATH, m_lblFwPath);
 	DDX_Control(pDX, IDC_STATIC_SPEC_FW_PATH, m_stFwPath);
+	DDX_Control(pDX, IDC_LBL_SPEC_FW_GRAB_INI, m_lblFwGrabIni);
+	DDX_Control(pDX, IDC_EDIT_SPEC_FW_GRAB_INI, m_edFwGrabIni);
+	DDX_Control(pDX, IDC_BTN_SPEC_FW_GRAB_BROWSE, m_btnFwGrabBrowse);
 	DDX_Control(pDX, IDC_STATIC_SPEC_FW_HINT, m_stFwHint);
 }
 
@@ -267,6 +270,7 @@ BEGIN_MESSAGE_MAP(CDtSpecDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_RAD_BP_ALGO_NEIGHBOR, &CDtSpecDlg::OnBnClickedRadBpAlgo)
 	ON_BN_CLICKED(IDC_RAD_BP_ALGO_HUAWEI, &CDtSpecDlg::OnBnClickedRadBpAlgo)
 	ON_CONTROL(CBN_SELCHANGE, IDC_COMBO_SPEC_FW_FOV, &CDtSpecDlg::OnCbnSelchangeFwFov)
+	ON_BN_CLICKED(IDC_BTN_SPEC_FW_GRAB_BROWSE, &CDtSpecDlg::OnBnClickedBtnFwGrabBrowse)
 	ON_BN_CLICKED(IDC_CHK_SPEC_FW_EN, &CDtSpecDlg::OnBnClickedChkFwEn)
 	ON_MESSAGE(WM_DPICHANGED, &CDtSpecDlg::OnDpiChanged)
 END_MESSAGE_MAP()
@@ -343,7 +347,8 @@ void CDtSpecDlg::HideFirmwarePageControls()
 {
 	CWnd* wnds[] = {
 		&m_grpFirmware, &m_chkFwEn, &m_lblFwFov, &m_lblFwWarmup, &m_edFwWarmup,
-		&m_lblFwPath, &m_stFwPath, &m_stFwHint,
+		&m_lblFwPath, &m_stFwPath, &m_lblFwGrabIni, &m_edFwGrabIni, &m_btnFwGrabBrowse,
+		&m_stFwHint,
 	};
 	for (int i = 0; i < (int)(sizeof(wnds) / sizeof(wnds[0])); i++)
 	{
@@ -703,12 +708,14 @@ int CDtSpecDlg::LayoutFirmwarePage(const CRect& viewport, double scale, bool bSh
 	const int fovLblW = LabelWidth(this, m_lblFwFov, scale);
 	const int warmLblW = LabelWidth(this, m_lblFwWarmup, scale);
 	const int pathLblW = LabelWidth(this, m_lblFwPath, scale);
+	const int grabLblW = LabelWidth(this, m_lblFwGrabIni, scale);
+	const int browseW = max((int)(64 * scale), 56);
 	const int comboH = m.editH + max((int)(120 * scale), 100);
 	CString hintText;
 	m_stFwHint.GetWindowText(hintText);
 	const int hintH = max((int)(48 * scale), MeasureStaticHeight(&m_stFwHint, w - pad * 2, hintText));
 	const int gH = m.grpHdr + m.grpPadB + chkH + m.rowStep + comboH + m.gap
-		+ m.rowStep + m.rowH + m.rowStep + m.rowH + m.gap + hintH;
+		+ m.rowStep + m.rowH + m.rowStep + m.rowH + m.rowStep + m.rowH + m.gap + hintH;
 
 	MoveWnd(&m_grpFirmware, CRect(x, y, x + w, y + gH));
 	int gy = y + m.grpHdr;
@@ -736,6 +743,14 @@ int CDtSpecDlg::LayoutFirmwarePage(const CRect& viewport, double scale, bool bSh
 	MoveWnd(&m_stFwPath, CRect(ix + pathLblW + m.gap, gy, ix + iw, gy + m.rowH));
 	show(m_lblFwPath);
 	show(m_stFwPath);
+	gy += m.rowStep;
+
+	MoveWnd(&m_lblFwGrabIni, CRect(ix, gy, ix + grabLblW, gy + m.rowH));
+	MoveWnd(&m_edFwGrabIni, CRect(ix + grabLblW + m.gap, gy, ix + iw - browseW - m.gap, gy + m.editH));
+	MoveWnd(&m_btnFwGrabBrowse, CRect(ix + iw - browseW, gy, ix + iw, gy + m.editH));
+	show(m_lblFwGrabIni);
+	show(m_edFwGrabIni);
+	show(m_btnFwGrabBrowse);
 	gy += m.rowStep + m.gap;
 
 	MoveWnd(&m_stFwHint, CRect(ix, gy, ix + iw, gy + hintH));
@@ -1103,6 +1118,9 @@ void CDtSpecDlg::ApplyDialogFonts()
 	m_edFwWarmup.SetFont(&m_fontBody);
 	m_lblFwPath.SetFont(&m_fontBody);
 	m_stFwPath.SetFont(&m_fontSmall);
+	m_lblFwGrabIni.SetFont(&m_fontBody);
+	m_edFwGrabIni.SetFont(&m_fontBody);
+	m_btnFwGrabBrowse.SetFont(&m_fontBody);
 	m_stFwHint.SetFont(&m_fontSmall);
 }
 
@@ -1281,6 +1299,8 @@ BOOL CDtSpecDlg::OnInitDialog()
 	m_lblFwFov.SetWindowText(ZH_UTF8(kSpecFwFov));
 	m_lblFwWarmup.SetWindowText(ZH_UTF8(kSpecFwWarmup));
 	m_lblFwPath.SetWindowText(ZH_UTF8(kSpecFwPath));
+	m_lblFwGrabIni.SetWindowText(ZH_UTF8(kSpecFwGrabIniAfterPc));
+	m_btnFwGrabBrowse.SetWindowText(ZH_UTF8(kSpecBpBrowse));
 	m_stFwHint.SetWindowText(ZH_UI(kSpecFwHint));
 
 	FillFirmwareFovCombo();
@@ -1294,6 +1314,9 @@ BOOL CDtSpecDlg::OnInitDialog()
 	m_edFwWarmup.ShowWindow(SW_HIDE);
 	m_lblFwPath.ShowWindow(SW_HIDE);
 	m_stFwPath.ShowWindow(SW_HIDE);
+	m_lblFwGrabIni.ShowWindow(SW_HIDE);
+	m_edFwGrabIni.ShowWindow(SW_HIDE);
+	m_btnFwGrabBrowse.ShowWindow(SW_HIDE);
 	m_stFwHint.ShowWindow(SW_HIDE);
 
 	m_pFn->ReadGateSpecIni();
@@ -1384,6 +1407,7 @@ BOOL CDtSpecDlg::OnInitDialog()
 	}
 	s.Format(_T("%d"), m_firmware.fwWarmupMs);
 	m_edFwWarmup.SetWindowText(s);
+	m_edFwGrabIni.SetWindowText(m_firmware.grabIniAfterPowerCycle);
 	UpdateFirmwarePathLabel();
 
 	UpdateFormulaText();
@@ -1529,6 +1553,12 @@ void CDtSpecDlg::OnOK()
 	m_firmware.fwWarmupMs = _tstoi((LPCTSTR)t);
 	if (m_firmware.fwWarmupMs < 500)
 		m_firmware.fwWarmupMs = 3000;
+	m_edFwGrabIni.GetWindowText(t);
+	t.Trim();
+	if (t.IsEmpty())
+		m_firmware.grabIniAfterPowerCycle[0] = 0;
+	else
+		_tcsncpy_s(m_firmware.grabIniAfterPowerCycle, (LPCTSTR)t, _TRUNCATE);
 	if (m_firmware.enabled)
 	{
 		TCHAR bin[MAX_PATH] = {};
@@ -1567,6 +1597,19 @@ void CDtSpecDlg::OnBnClickedBtnBpBrowse()
 	const CString picked = BrowseFolder(m_hWnd, ZH_UTF8(kBrowseBpDir));
 	if (!picked.IsEmpty())
 		m_edBpDir.SetWindowText(picked);
+}
+
+void CDtSpecDlg::OnBnClickedBtnFwGrabBrowse()
+{
+	CString cur;
+	m_edFwGrabIni.GetWindowText(cur);
+	cur.Trim();
+	CFileDialog dlg(TRUE, _T("ini"), cur.IsEmpty() ? NULL : (LPCTSTR)cur,
+		OFN_HIDEREADONLY | OFN_FILEMUSTEXIST,
+		_T("Ini File (*.ini)|*.ini||"), this);
+	dlg.m_ofn.lpstrTitle = ZH_UTF8(kBrowseFwGrabIni);
+	if (dlg.DoModal() == IDOK)
+		m_edFwGrabIni.SetWindowText(dlg.GetPathName());
 }
 
 void CDtSpecDlg::FillFirmwareFovCombo()

@@ -136,6 +136,8 @@ Fa132DualChip={{FW_FA132_DUAL_CHIP}}
 ; DualChipVcSplit：分界 VC，默认 2→VC0/1 第一颗，VC2/3 第二颗
 DualChipVcSplit={{FW_DUAL_CHIP_VC_SPLIT}}
 ; ---------- 烧录后流程 ----------
+; GrabIniAfterPowerCycle：断电上电后校验/光测用的 GrabTab ini（主界面 Load 仍为烧录前点亮）
+GrabIniAfterPowerCycle={{FW_GRAB_INI_AFTER_PC}}
 ; PowerCycleAfter：=1 且 Enabled=1 烧录后断电上电再校验；仅校验时不断电
 PowerCycleAfter={{FW_POWER_CYCLE}}
 

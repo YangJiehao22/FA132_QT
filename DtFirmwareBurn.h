@@ -35,6 +35,8 @@ struct GateFirmwareBurnCfg
 	bool readSensorIdEnabled;
 	/** Resolved full path (runtime). */
 	TCHAR binPath[MAX_PATH];
+	/** GrabTab ini after PowerCycleAfter (post-burn verify / light test); from GateSpec + Spec UI. */
+	TCHAR grabIniAfterPowerCycle[MAX_PATH];
 };
 
 struct Sony031VerifyResult

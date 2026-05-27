@@ -583,6 +583,7 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 			if (!BeginFirmwarePrepAsync())
 				return;
 			m_bStart = TRUE;
+			m_dtFunction.LogProductionRunStart();
 			SetTimer(0, 1000, NULL);
 		}
 		else if (fwVerify)
@@ -590,6 +591,7 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 			if (!m_dtFunction.Start())
 				return;
 			m_bStart = TRUE;
+			m_dtFunction.LogProductionRunStart();
 			SetTimer(0, 1000, NULL);
 			ScheduleFirmwareVerifyThenLightTest();
 		}
@@ -600,6 +602,7 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 		else
 		{
 			m_bStart = TRUE;
+			m_dtFunction.LogProductionRunStart();
 			SetTimer(0, 1000, NULL);
 			SetTimer(TIMER_ID_STREAM_GATE, m_dtFunction.m_specDelayMs, NULL);
 		}
@@ -1317,6 +1320,11 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 		m_bFwPowerCyclePending = FALSE;
 		msgUtf8(DtZh::kFwPowerCycleRestart);
 		m_dtFunction.ReadGateSpecIni();
+		if (!m_dtFunction.ReloadGrabParaAfterPowerCycle())
+		{
+			msgUtf8(DtZh::kFwGrabIniReloadAbort);
+			return;
+		}
 		if (!m_dtFunction.Start())
 		{
 			msgUtf8(DtZh::kLogPwCycleStartFail);

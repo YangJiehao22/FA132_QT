@@ -178,6 +178,9 @@
 #define IDC_LBL_SPEC_FW_PATH            2210
 #define IDC_STATIC_SPEC_FW_PATH         2211
 #define IDC_STATIC_SPEC_FW_HINT         2212
+#define IDC_LBL_SPEC_FW_GRAB_INI        2214
+#define IDC_EDIT_SPEC_FW_GRAB_INI       2215
+#define IDC_BTN_SPEC_FW_GRAB_BROWSE     2216
 #define IDC_LBL_BP_DIR                    2185
 #define IDC_EDIT_SPEC_BP_DIR              2186
 #define IDC_BTN_SPEC_BP_BROWSE            2187
@@ -245,7 +248,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        137
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         2214
+#define _APS_NEXT_CONTROL_VALUE         2217
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

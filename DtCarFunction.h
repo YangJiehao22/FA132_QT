@@ -163,6 +163,8 @@ public:
 	/** UI-thread capture init (carInitPower + carInitGrab). */
 	bool InitWorkCapture(int devId);
 	void UninitWorkCapture(int devId);
+	/** After PowerCycleAfter: carLoadGrabPara(grabIniAfterPowerCycle) per enabled Dev (before Start). */
+	bool ReloadGrabParaAfterPowerCycle();
 	/** carDrawImage on UI thread (required for MFC CStatic preview). */
 	int DrawImageOnUiThread(const DrawImage_t& di, int vcId, int devId);
 
@@ -181,6 +183,9 @@ public:
 	/** Unified UI + Production_report.csv for burn/verify abort or light-test completion. */
 	bool FinalizeProductionRun(int failStage);
 	bool FinalizeProductionRun(int failStage, const std::vector<LightTestChannelRecord>& rows, bool allPass);
+	/** Prominent log banner at Start / end of one production run (same-day log file). */
+	void LogProductionRunStart();
+	void LogProductionRunEnd(int failStage, bool allPass);
 	/** Parallel Sony031 flash on enabled Dev/VC (same Dev: all VC threads in parallel).
 	    afterStart=false (UI): prep init only, no pause/join; power-cycle stays in DtSampleDlg.
 	    afterStart=true (legacy): capture threads running, PauseWorkThreads before burn. */
@@ -268,6 +273,8 @@ protected:
 
 	CString m_lightTestSessionDir;
 	CString m_lightTestSessionTag;
+	DWORD m_dwProductionRunStartTick;
+	BOOL m_bProductionRunActive;
 
 	DECLARE_MESSAGE_MAP()
 };
