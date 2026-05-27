@@ -891,18 +891,8 @@ void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 	}
 }
 
-void CDtSampleDlg::ContinueAfterFirmwareBurn(bool burnOk)
+void CDtSampleDlg::ContinueAfterFirmwareBurn()
 {
-	if (!burnOk)
-	{
-		const int stage = m_dtFunction.AnySensorIdReadFailed()
-			? PROD_STAGE_SENSOR_ID : PROD_STAGE_BURN;
-		m_dtFunction.FinalizeProductionRun(stage);
-		SetWindowText(ZH_UTF8(kMainTitleTestNg));
-		if (m_bStart)
-			StopCaptureAndShowResults(FALSE);
-		return;
-	}
 	ScheduleFirmwareVerifyThenLightTest();
 }
 
@@ -961,30 +951,21 @@ bool CDtSampleDlg::RunFirmwareBurnVerifyOrStop()
 			if (captureWasUp)
 				m_dtFunction.RestoreWorkCaptureAfterVerify();
 			msgUtf8(DtZh::kFwVerifyPrepFail);
-			m_dtFunction.FinalizeProductionRun(PROD_STAGE_VERIFY);
-			SetWindowText(ZH_UTF8(kMainTitleTestNg));
-			if (m_bStart)
-				StopCaptureAndShowResults(FALSE);
-			return false;
+		}
+		else
+		{
+			msgUtf8(DtZh::kFwVerifyStart);
+			(void)m_dtFunction.RunFirmwareBurnVerifyAll();
+			if (usePrep && captureWasUp)
+				m_dtFunction.RestoreWorkCaptureAfterVerify();
 		}
 	}
-
-	msgUtf8(DtZh::kFwVerifyStart);
-	const bool ok = m_dtFunction.RunFirmwareBurnVerifyAll();
-
-	if (usePrep && captureWasUp)
-		m_dtFunction.RestoreWorkCaptureAfterVerify();
-
-	if (!ok)
+	else
 	{
-		msgUtf8(DtZh::kFwVerifyFail);
-		m_dtFunction.FinalizeProductionRun(PROD_STAGE_VERIFY);
-		SetWindowText(ZH_UTF8(kMainTitleTestNg));
-		if (m_bStart)
-			StopCaptureAndShowResults(FALSE);
-		return false;
+		msgUtf8(DtZh::kFwVerifyStart);
+		(void)m_dtFunction.RunFirmwareBurnVerifyAll();
 	}
-	msgUtf8(DtZh::kFwVerifyOk);
+
 	return true;
 }
 
@@ -1031,18 +1012,12 @@ LRESULT CDtSampleDlg::OnFwBurnDone(WPARAM wParam, LPARAM lParam)
 		return 0;
 	m_fwBurnHandledGen = gen;
 
-	const bool burnOk = (wParam != 0);
-	if (!burnOk)
-	{
-		ContinueAfterFirmwareBurn(false);
-		return 0;
-	}
-
+	(void)wParam;
 	if (!m_bStart && !m_bFwPowerCyclePending)
 		return 0;
 
 	ClearFwBurnCellOverlay(false);
-	ContinueAfterFirmwareBurn(true);
+	ContinueAfterFirmwareBurn();
 	return 0;
 }
 

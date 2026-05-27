@@ -22,6 +22,10 @@ struct GateFirmwareBurnCfg
 	bool autoDetectSlave;
 	/** FA132 multi-VC: true = SetMipiImageVC(vc) before flash/SensorID on that lane. */
 	bool useMipiVcForBurn;
+	/** FA132 dual-chip: carSetChipID before per-VC I2C (vc<split->0, vc>=split->1). */
+	bool fa132DualChip;
+	/** VC index >= this value uses ChipID 1 (default 2: VC2/VC3 on second chip). */
+	int dualChipVcSplit;
 	bool powerCycleAfter;
 	/** After burn + power-cycle: read key regs (Ruibo ReadFlashCalibrationResult). */
 	bool verifyEnabled;
@@ -65,6 +69,12 @@ bool ResolveFirmwareBinPath(const GateFirmwareBurnCfg& cfg, TCHAR outPath[MAX_PA
 
 /** Set I2C rate once per Dev before parallel VC burn threads (not per thread). */
 bool FirmwareBurnSetupDevI2c(int devId, const GateFirmwareBurnCfg& cfg);
+
+/** FA132 dual-chip: 0 = first 96718 (VC < split), 1 = second. */
+int FirmwareChipIdForVc(int vcId, const GateFirmwareBurnCfg& cfg);
+
+/** FA132: carSetChipID + optional SetMipiImageVC for the given VC lane. */
+bool FirmwareSelectVcLane(int devId, int vcId, const GateFirmwareBurnCfg& cfg);
 
 /** UI thread receives WM_FW_BURN_PROGRESS (see DtCarFunction.h). */
 void FirmwareBurnSetProgressTarget(HWND hwnd);

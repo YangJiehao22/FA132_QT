@@ -137,34 +137,6 @@ static bool ResolveFlashSlave(int devId, int vcId, unsigned char slaveHint,
 	return false;
 }
 
-static CRITICAL_SECTION s_devFlashI2cLock[MAX_CC16 * MAX_DEV];
-static volatile LONG s_devFlashI2cLockInit = 0;
-
-static void EnsureDevFlashI2cLocks()
-{
-	if (InterlockedCompareExchange(&s_devFlashI2cLockInit, 1, 0) != 0)
-		return;
-	for (int i = 0; i < MAX_CC16 * MAX_DEV; i++)
-		InitializeCriticalSection(&s_devFlashI2cLock[i]);
-}
-
-struct DevFlashI2cLockGuard
-{
-	int devId;
-	explicit DevFlashI2cLockGuard(int dev)
-		: devId(dev)
-	{
-		EnsureDevFlashI2cLocks();
-		if (devId >= 0 && devId < MAX_CC16 * MAX_DEV)
-			EnterCriticalSection(&s_devFlashI2cLock[devId]);
-	}
-	~DevFlashI2cLockGuard()
-	{
-		if (devId >= 0 && devId < MAX_CC16 * MAX_DEV)
-			LeaveCriticalSection(&s_devFlashI2cLock[devId]);
-	}
-};
-
 static bool SelectMipiVc(int devId, int vcId)
 {
 	if (!EnsureDtccm2Procs())
@@ -174,6 +146,42 @@ static bool SelectMipiVc(int devId, int vcId)
 }
 
 } // namespace
+
+int FirmwareChipIdForVc(int vcId, const GateFirmwareBurnCfg& cfg)
+{
+	const int split = (cfg.dualChipVcSplit >= 1 && cfg.dualChipVcSplit <= MAX_VC)
+		? cfg.dualChipVcSplit : 2;
+	if (vcId < 0 || vcId >= MAX_VC)
+		return 0;
+	return (vcId >= split) ? 1 : 0;
+}
+
+bool FirmwareSelectVcLane(int devId, int vcId, const GateFirmwareBurnCfg& cfg)
+{
+	if (devId < 0 || devId >= MAX_CC16 * MAX_DEV || vcId < 0 || vcId >= MAX_VC)
+		return false;
+
+	if (cfg.fa132DualChip)
+	{
+		const int chipId = FirmwareChipIdForVc(vcId, cfg);
+		const int iRet = ::carSetChipID(chipId, devId);
+		if (iRet != DT_ERROR_OK)
+		{
+			msgUtf8(DtZh::kFwSetChipFail, devId, vcId, chipId, iRet);
+			return false;
+		}
+	}
+
+	if (cfg.useMipiVcForBurn)
+	{
+		if (!SelectMipiVc(devId, vcId))
+		{
+			msgUtf8(DtZh::kFwSetVcFail, devId, vcId);
+			return false;
+		}
+	}
+	return true;
+}
 
 void FirmwareBurnSetProgressTarget(HWND hwnd)
 {
@@ -284,15 +292,10 @@ bool Sony031ReadSensorId(
 		return false;
 	}
 
-	DevFlashI2cLockGuard i2cLock(devId);
-	if (cfg.useMipiVcForBurn)
+	if (!FirmwareSelectVcLane(devId, vcId, cfg))
 	{
-		if (!SelectMipiVc(devId, vcId))
-		{
-			msgUtf8(DtZh::kFwSetVcFail, devId, vcId);
-			outResult->errorCode = 13;
-			return false;
-		}
+		outResult->errorCode = 14;
+		return false;
 	}
 
 	unsigned char slave = 0;
@@ -366,15 +369,10 @@ bool Sony031FlashProgram(
 		return false;
 	}
 
-	DevFlashI2cLockGuard i2cLock(devId);
-	if (cfg.useMipiVcForBurn)
+	if (!FirmwareSelectVcLane(devId, vcId, cfg))
 	{
-		if (!SelectMipiVc(devId, vcId))
-		{
-			msgUtf8(DtZh::kFwSetVcFail, devId, vcId);
-			outResult->errorCode = 13;
-			return false;
-		}
+		outResult->errorCode = 14;
+		return false;
 	}
 
 	unsigned char slave = 0;
@@ -539,15 +537,8 @@ bool Sony031VerifyFlashCalibration(
 		return false;
 	}
 
-	DevFlashI2cLockGuard i2cLock(devId);
-	if (cfg.useMipiVcForBurn)
-	{
-		if (!SelectMipiVc(devId, vcId))
-		{
-			msgUtf8(DtZh::kFwVerifySetVcFail, devId, vcId);
-			return false;
-		}
-	}
+	if (!FirmwareSelectVcLane(devId, vcId, cfg))
+		return false;
 
 	unsigned char slave = 0;
 	if (!ResolveFlashSlave(devId, vcId, slaveHint, cfg.autoDetectSlave, &slave))

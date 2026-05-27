@@ -95,6 +95,8 @@ static GateFirmwareBurnCfg GateDefaultFirmwareBurn()
 	c.i2cRateKbps = 800;
 	c.autoDetectSlave = true;
 	c.useMipiVcForBurn = true;
+	c.fa132DualChip = true;
+	c.dualChipVcSplit = 2;
 	c.powerCycleAfter = true;
 	c.verifyEnabled = true;
 	c.verifyBeforeGrab = false;
@@ -134,6 +136,10 @@ static void GateIniFillFirmwareBurn(LPCTSTR path, const GateFirmwareBurnCfg& fb,
 		out->i2cRateKbps = 800;
 	out->autoDetectSlave = (GateIniInt(path, sec, _T("AutoDetectSlave"), fb.autoDetectSlave ? 1 : 0) != 0);
 	out->useMipiVcForBurn = (GateIniInt(path, sec, _T("UseMipiVcForBurn"), fb.useMipiVcForBurn ? 1 : 0) != 0);
+	out->fa132DualChip = (GateIniInt(path, sec, _T("Fa132DualChip"), fb.fa132DualChip ? 1 : 0) != 0);
+	out->dualChipVcSplit = GateIniInt(path, sec, _T("DualChipVcSplit"), fb.dualChipVcSplit);
+	if (out->dualChipVcSplit < 1 || out->dualChipVcSplit > MAX_VC)
+		out->dualChipVcSplit = 2;
 	out->powerCycleAfter = (GateIniInt(path, sec, _T("PowerCycleAfter"), fb.powerCycleAfter ? 1 : 0) != 0);
 	out->verifyEnabled = (GateIniInt(path, sec, _T("VerifyEnabled"), fb.verifyEnabled ? 1 : 0) != 0);
 	out->verifyBeforeGrab = (GateIniInt(path, sec, _T("VerifyBeforeGrab"), fb.verifyBeforeGrab ? 1 : 0) != 0);
@@ -241,11 +247,15 @@ static void GateIniFillLimits(LPCTSTR path, LPCTSTR section, const GateChannelLi
 }
 
 /** TempC = (b0*CoeffLow + b1*CoeffHigh) / Divisor + Offset; RegHigh=0 uses one byte only. */
-static bool ReadSensorTempC(int devId, const GateSensorTempI2c& cfg, double* outTempC)
+static bool ReadSensorTempC(int devId, int vcId, const GateSensorTempI2c& cfg,
+	const GateFirmwareBurnCfg& fwLane, double* outTempC)
 {
 	if (outTempC == NULL || !cfg.enabled)
 		return false;
 	if (cfg.divisor == 0.0)
+		return false;
+
+	if (!FirmwareSelectVcLane(devId, vcId, fwLane))
 		return false;
 
 	USHORT vLo = 0;
@@ -2365,6 +2375,10 @@ int DtCarFunction::SaveGateSpecIni()
 	ReplaceTokenA(tplUtf8, "{{FW_AUTO_SLAVE}}", v);
 	v.Format("%d", fw.useMipiVcForBurn ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{FW_USE_MIPI_VC}}", v);
+	v.Format("%d", fw.fa132DualChip ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{FW_FA132_DUAL_CHIP}}", v);
+	v.Format("%d", fw.dualChipVcSplit);
+	ReplaceTokenA(tplUtf8, "{{FW_DUAL_CHIP_VC_SPLIT}}", v);
 	v.Format("%d", fw.powerCycleAfter ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{FW_POWER_CYCLE}}", v);
 	v.Format("%d", fw.verifyEnabled ? 1 : 0);
@@ -2552,8 +2566,6 @@ unsigned __stdcall DtCarFunction::FirmwareVerifyThreadProc(void* p)
 	const bool ok = Sony031VerifyFlashCalibration(
 		dev, vc, tp->cfg.fovTypeIndex, tp->cfg, tp->slaveHint, &vr);
 	fn->m_bFirmwareBurnVerifyPass[dev][vc] = ok;
-	if (!ok)
-		fn->m_bFirmwareBurnPass[dev][vc] = false;
 	delete tp;
 	return ok ? 0 : 1;
 }
@@ -2658,7 +2670,7 @@ bool DtCarFunction::PauseWorkThreadsForFirmwareBurn()
 	return true;
 }
 
-static void MarkEnabledFirmwareBurnFailed(DtCarFunction* fn)
+static void MarkEnabledFirmwareBurnFailed(DtCarFunction* fn, int errCode = 1)
 {
 	if (fn == NULL)
 		return;
@@ -2672,9 +2684,60 @@ static void MarkEnabledFirmwareBurnFailed(DtCarFunction* fn)
 			if (!fn->IsVcEnabled(d, v))
 				continue;
 			fn->m_bFirmwareBurnPass[d][v] = false;
-			fn->m_fwBurnErrCode[d][v] = 1;
+			fn->m_fwBurnErrCode[d][v] = errCode;
 		}
 	}
+}
+
+static void MarkDevFirmwareBurnFailed(DtCarFunction* fn, int devId, int errCode = 1)
+{
+	if (fn == NULL || devId < 0 || devId >= MAX_CC16 * MAX_DEV)
+		return;
+	fn->m_bFirmwareBurnHasResult = true;
+	for (int v = 0; v < fn->m_iVcNum; v++)
+	{
+		if (!fn->IsVcEnabled(devId, v))
+			continue;
+		fn->m_bFirmwareBurnPass[devId][v] = false;
+		fn->m_fwBurnErrCode[devId][v] = errCode;
+	}
+}
+
+static void MarkVcFirmwareBurnFailed(DtCarFunction* fn, int devId, int vcId, int errCode = 1)
+{
+	if (fn == NULL || devId < 0 || devId >= MAX_CC16 * MAX_DEV
+		|| vcId < 0 || vcId >= MAX_VC)
+		return;
+	if (!fn->IsVcEnabled(devId, vcId))
+		return;
+	fn->m_bFirmwareBurnHasResult = true;
+	fn->m_bFirmwareBurnPass[devId][vcId] = false;
+	fn->m_fwBurnErrCode[devId][vcId] = errCode;
+}
+
+static int FirmwareChipPhaseCount(const GateFirmwareBurnCfg& cfg)
+{
+	return cfg.fa132DualChip ? 2 : 1;
+}
+
+static bool VcOnFirmwareChipPhase(int vcId, int chipPhase, const GateFirmwareBurnCfg& cfg)
+{
+	if (!cfg.fa132DualChip)
+		return chipPhase == 0;
+	return FirmwareChipIdForVc(vcId, cfg) == chipPhase;
+}
+
+static void JoinFirmwareWorkerThreads(std::vector<HANDLE>& handles)
+{
+	for (size_t i = 0; i < handles.size(); i++)
+	{
+		if (handles[i] != NULL)
+		{
+			WaitForSingleObject(handles[i], INFINITE);
+			CloseHandle(handles[i]);
+		}
+	}
+	handles.clear();
 }
 
 bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
@@ -2687,8 +2750,8 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 	{
 		CStringA fovA(CT2A(FirmwareFovTypeName(m_gateFirmwareBurn.fovTypeIndex)));
 		msgUtf8(DtZh::kFwBinReadFail, (LPCSTR)fovA);
-		MarkEnabledFirmwareBurnFailed(this);
-		return false;
+		MarkEnabledFirmwareBurnFailed(this, 12);
+		return true;
 	}
 	_tcsncpy_s(m_gateFirmwareBurn.binPath, binFull, _TRUNCATE);
 	{
@@ -2700,7 +2763,7 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 	{
 		msgUtf8(DtZh::kFwNeedOpen);
 		MarkEnabledFirmwareBurnFailed(this);
-		return false;
+		return true;
 	}
 	bool captureWasRunning = (m_bRunning != FALSE);
 
@@ -2722,98 +2785,98 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 			FirmwareBurnSetProgressTarget(NULL);
 			m_bFirmwareBurnInProgress = false;
 			MarkEnabledFirmwareBurnFailed(this);
-			return false;
+			return true;
 		}
 		PauseWorkThreadsForFirmwareBurn();
 	}
 
-	std::vector<HANDLE> threads;
-	std::vector<DtFirmwareBurnThreadParam*> params;
+	bool devBurnReady[MAX_CC16 * MAX_DEV] = {};
+	const GateFirmwareBurnCfg& fwCfg = m_gateFirmwareBurn;
+	const int chipPhases = FirmwareChipPhaseCount(fwCfg);
 	for (int d = 0; d < m_iEnumDevNum; d++)
 	{
 		if (!IsDevEnabled(d))
 			continue;
+		bool ready = true;
 		if (!afterStart)
 		{
 			if (!InitWorkCapture(d))
 			{
 				msgUtf8(DtZh::kFwPrepDevInitFail, d);
-				FirmwareBurnSetProgressTarget(NULL);
-				m_bFirmwareBurnInProgress = false;
-				MarkEnabledFirmwareBurnFailed(this);
-				return false;
+				MarkDevFirmwareBurnFailed(this, d, 1);
+				ready = false;
 			}
-			if (!m_workGrabReady[d])
+			else if (!m_workGrabReady[d])
 			{
 				msgUtf8(DtZh::kFwPrepNotReady, d);
-				FirmwareBurnSetProgressTarget(NULL);
-				m_bFirmwareBurnInProgress = false;
-				MarkEnabledFirmwareBurnFailed(this);
-				return false;
+				MarkDevFirmwareBurnFailed(this, d, 1);
+				ready = false;
 			}
 		}
 		else if (!m_workGrabReady[d])
 		{
 			msgUtf8(DtZh::kLogFwGrabNotReady, d);
-			FirmwareBurnSetProgressTarget(NULL);
-			m_bFirmwareBurnInProgress = false;
-			MarkEnabledFirmwareBurnFailed(this);
-			return false;
+			MarkDevFirmwareBurnFailed(this, d, 1);
+			ready = false;
 		}
+		if (!ready)
+			continue;
 		if (!FirmwareBurnSetupDevI2c(d, m_gateFirmwareBurn))
 		{
-			FirmwareBurnSetProgressTarget(NULL);
-			m_bFirmwareBurnInProgress = false;
-			MarkEnabledFirmwareBurnFailed(this);
-			return false;
+			MarkDevFirmwareBurnFailed(this, d, 5);
+			continue;
 		}
+		devBurnReady[d] = true;
 	}
 
 	if (m_gateFirmwareBurn.readSensorIdEnabled)
 	{
 		msgUtf8(DtZh::kFwSensorIdStart);
 		m_bSensorIdHasResult = true;
-		std::vector<HANDLE> idThreads;
-		for (int d = 0; d < m_iEnumDevNum; d++)
+		for (int chipPhase = 0; chipPhase < chipPhases; chipPhase++)
 		{
-			if (!IsDevEnabled(d))
-				continue;
-			for (int v = 0; v < m_iVcNum; v++)
+			if (fwCfg.fa132DualChip)
+				msgUtf8(DtZh::kLogFwChipPhaseSensorId, chipPhase);
+			std::vector<HANDLE> idThreads;
+			for (int d = 0; d < m_iEnumDevNum; d++)
 			{
-				if (!IsVcEnabled(d, v))
+				if (!IsDevEnabled(d))
 					continue;
-				DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
-				tp->fn = this;
-				tp->devId = d;
-				tp->vcId = v;
-				tp->cfg = m_gateFirmwareBurn;
-				tp->slaveHint = m_gateTempI2cAddr[d][v];
-				unsigned threadId = 0;
-				HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareSensorIdThreadProc, tp, 0, &threadId);
-				if (h == NULL)
+				for (int v = 0; v < m_iVcNum; v++)
 				{
-					delete tp;
-					msgUtf8(DtZh::kLogFwThreadFail, d, v);
-					Sony031SensorIdResult sr = {};
-					if (!Sony031ReadSensorId(d, v, m_gateFirmwareBurn, m_gateTempI2cAddr[d][v], &sr))
+					if (!IsVcEnabled(d, v))
+						continue;
+					if (!VcOnFirmwareChipPhase(v, chipPhase, fwCfg))
+						continue;
+					DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
+					tp->fn = this;
+					tp->devId = d;
+					tp->vcId = v;
+					tp->cfg = fwCfg;
+					tp->slaveHint = m_gateTempI2cAddr[d][v];
+					unsigned threadId = 0;
+					HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareSensorIdThreadProc, tp, 0, &threadId);
+					if (h == NULL)
 					{
-						m_bSensorIdReadOk[d][v] = false;
-						m_fwBurnErrCode[d][v] = 2;
+						delete tp;
+						msgUtf8(DtZh::kLogFwThreadFail, d, v);
+						Sony031SensorIdResult sr = {};
+						if (!Sony031ReadSensorId(d, v, fwCfg, m_gateTempI2cAddr[d][v], &sr))
+						{
+							m_bSensorIdReadOk[d][v] = false;
+							m_fwBurnErrCode[d][v] = 2;
+						}
+						else
+						{
+							m_bSensorIdReadOk[d][v] = true;
+							_tcsncpy_s(m_sensorIdHex[d][v], sr.sensorIdHex, _TRUNCATE);
+						}
+						continue;
 					}
-					else
-					{
-						m_bSensorIdReadOk[d][v] = true;
-						_tcsncpy_s(m_sensorIdHex[d][v], sr.sensorIdHex, _TRUNCATE);
-					}
-					continue;
+					idThreads.push_back(h);
 				}
-				idThreads.push_back(h);
 			}
-		}
-		for (size_t i = 0; i < idThreads.size(); i++)
-		{
-			WaitForSingleObject(idThreads[i], INFINITE);
-			CloseHandle(idThreads[i]);
+			JoinFirmwareWorkerThreads(idThreads);
 		}
 
 		bool idAllPass = true;
@@ -2830,57 +2893,49 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 			}
 		}
 		if (!idAllPass)
-		{
 			msgUtf8(DtZh::kFwSensorIdParallelFail);
-			FirmwareBurnSetProgressTarget(NULL);
-			m_bFirmwareBurnInProgress = false;
-			return false;
-		}
 	}
 	else
 	{
 		msgUtf8(DtZh::kFwSensorIdSkipIni);
 	}
 
-	for (int d = 0; d < m_iEnumDevNum; d++)
+	for (int chipPhase = 0; chipPhase < chipPhases; chipPhase++)
 	{
-		if (!IsDevEnabled(d))
-			continue;
-		msgUtf8(DtZh::kLogFwBurnDev, d, d);
-		for (int v = 0; v < m_iVcNum; v++)
+		if (fwCfg.fa132DualChip)
+			msgUtf8(DtZh::kLogFwChipPhaseBurn, chipPhase);
+		std::vector<HANDLE> threads;
+		for (int d = 0; d < m_iEnumDevNum; d++)
 		{
-			if (!IsVcEnabled(d, v))
+			if (!IsDevEnabled(d) || !devBurnReady[d])
 				continue;
-			DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
-			tp->fn = this;
-			tp->devId = d;
-			tp->vcId = v;
-			tp->cfg = m_gateFirmwareBurn;
-			tp->slaveHint = m_gateTempI2cAddr[d][v];
-			unsigned threadId = 0;
-			HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareBurnThreadProc, tp, 0, &threadId);
-			if (h == NULL)
+			if (chipPhase == 0)
+				msgUtf8(DtZh::kLogFwBurnDev, d, d);
+			for (int v = 0; v < m_iVcNum; v++)
 			{
-				delete tp;
-				msgUtf8(DtZh::kLogFwThreadFail, d, v);
-				for (size_t i = 0; i < threads.size(); i++)
+				if (!IsVcEnabled(d, v))
+					continue;
+				if (!VcOnFirmwareChipPhase(v, chipPhase, fwCfg))
+					continue;
+				DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
+				tp->fn = this;
+				tp->devId = d;
+				tp->vcId = v;
+				tp->cfg = fwCfg;
+				tp->slaveHint = m_gateTempI2cAddr[d][v];
+				unsigned threadId = 0;
+				HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareBurnThreadProc, tp, 0, &threadId);
+				if (h == NULL)
 				{
-					WaitForSingleObject(threads[i], INFINITE);
-					CloseHandle(threads[i]);
+					delete tp;
+					msgUtf8(DtZh::kLogFwThreadFail, d, v);
+					MarkVcFirmwareBurnFailed(this, d, v, 1);
+					continue;
 				}
-				FirmwareBurnSetProgressTarget(NULL);
-				m_bFirmwareBurnInProgress = false;
-				return false;
+				threads.push_back(h);
 			}
-			threads.push_back(h);
-			params.push_back(tp);
 		}
-	}
-
-	for (size_t i = 0; i < threads.size(); i++)
-	{
-		WaitForSingleObject(threads[i], INFINITE);
-		CloseHandle(threads[i]);
+		JoinFirmwareWorkerThreads(threads);
 	}
 
 	FirmwareBurnSetProgressTarget(NULL);
@@ -2906,7 +2961,8 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 
 	if (!allPass)
 		msgUtf8(DtZh::kFwParallelFail);
-	return allPass;
+	/* Per-VC results in m_bFirmwareBurnPass; always continue verify/light test. */
+	return true;
 }
 
 static void LogFirmwareVerifySummary(DtCarFunction* fn, bool allPass)
@@ -2999,51 +3055,55 @@ bool DtCarFunction::RunFirmwareBurnVerifyAll()
 		msgUtf8(DtZh::kLogFwVerifyFov, (LPCSTR)fovA, cfg.fovTypeIndex);
 	}
 
-	std::vector<HANDLE> threads;
-	for (int d = 0; d < m_iEnumDevNum; d++)
+	const int chipPhases = FirmwareChipPhaseCount(cfg);
+	for (int chipPhase = 0; chipPhase < chipPhases; chipPhase++)
 	{
-		if (!IsDevEnabled(d))
-			continue;
-		if (!FirmwareBurnSetupDevI2c(d, cfg))
+		if (cfg.fa132DualChip)
+			msgUtf8(DtZh::kLogFwChipPhaseVerify, chipPhase);
+		std::vector<HANDLE> threads;
+		for (int d = 0; d < m_iEnumDevNum; d++)
 		{
+			if (!IsDevEnabled(d))
+				continue;
+			if (!FirmwareBurnSetupDevI2c(d, cfg))
+			{
+				for (int v = 0; v < m_iVcNum; v++)
+				{
+					if (!IsVcEnabled(d, v))
+						continue;
+					if (!VcOnFirmwareChipPhase(v, chipPhase, cfg))
+						continue;
+					m_bFirmwareBurnVerifyPass[d][v] = false;
+				}
+				continue;
+			}
+			if (chipPhase == 0)
+				msgUtf8(DtZh::kLogFwVerifyDev, d, d);
 			for (int v = 0; v < m_iVcNum; v++)
 			{
 				if (!IsVcEnabled(d, v))
 					continue;
-				m_bFirmwareBurnVerifyPass[d][v] = false;
-				m_bFirmwareBurnPass[d][v] = false;
+				if (!VcOnFirmwareChipPhase(v, chipPhase, cfg))
+					continue;
+				DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
+				tp->fn = this;
+				tp->devId = d;
+				tp->vcId = v;
+				tp->cfg = cfg;
+				tp->slaveHint = m_gateTempI2cAddr[d][v];
+				unsigned threadId = 0;
+				HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareVerifyThreadProc, tp, 0, &threadId);
+				if (h == NULL)
+				{
+					delete tp;
+					msgUtf8(DtZh::kLogFwVerifyThreadFail, d, v);
+					m_bFirmwareBurnVerifyPass[d][v] = false;
+					continue;
+				}
+				threads.push_back(h);
 			}
-			continue;
 		}
-		msgUtf8(DtZh::kLogFwVerifyDev, d, d);
-		for (int v = 0; v < m_iVcNum; v++)
-		{
-			if (!IsVcEnabled(d, v))
-				continue;
-			DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
-			tp->fn = this;
-			tp->devId = d;
-			tp->vcId = v;
-			tp->cfg = cfg;
-			tp->slaveHint = m_gateTempI2cAddr[d][v];
-			unsigned threadId = 0;
-			HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareVerifyThreadProc, tp, 0, &threadId);
-			if (h == NULL)
-			{
-				delete tp;
-				msgUtf8(DtZh::kLogFwVerifyThreadFail, d, v);
-				m_bFirmwareBurnVerifyPass[d][v] = false;
-				m_bFirmwareBurnPass[d][v] = false;
-				continue;
-			}
-			threads.push_back(h);
-		}
-	}
-
-	for (size_t i = 0; i < threads.size(); i++)
-	{
-		WaitForSingleObject(threads[i], INFINITE);
-		CloseHandle(threads[i]);
+		JoinFirmwareWorkerThreads(threads);
 	}
 
 	bool allPass = true;
@@ -3063,7 +3123,7 @@ bool DtCarFunction::RunFirmwareBurnVerifyAll()
 	LogFirmwareVerifySummary(this, allPass);
 	if (!allPass)
 		msgUtf8(DtZh::kFwVerifyParallelFail);
-	return allPass;
+	return true;
 }
 
 void DtCarFunction::UpdateGrayCacheFromGrab(int devId, int vcId, const DtImage_t& grabImg)
@@ -3875,7 +3935,7 @@ static bool RunLightGateOneChannel(DtCarFunction* fn, int d, int v,
 	GateSensorTempI2c tempCfg = fn->m_gateSensorTempI2c;
 	tempCfg.i2cAddr = fn->m_gateTempI2cAddr[d][v];
 	double tempC = 0.0;
-	const bool hasTemp = ReadSensorTempC(d, tempCfg, &tempC);
+	const bool hasTemp = ReadSensorTempC(d, v, tempCfg, fn->m_gateFirmwareBurn, &tempC);
 
 	::carGetChannelData(&fn->m_tVcData[d][v], v, d);
 	const double ssr = fn->m_tVcData[d][v].dSsrFrameRate;
@@ -4475,28 +4535,13 @@ int DtCarFunction::StartFirmwarePrep()
 		HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &FirmwarePrepDevThreadProc, tp, 0, &tid);
 		if (h == NULL)
 		{
-			delete tp;
 			msgUtf8(DtZh::kFwPrepDevInitFail, i);
-			if (!InitWorkCapture(i))
-			{
-				for (size_t t = 0; t < threads.size(); t++)
-				{
-					WaitForSingleObject(threads[t], INFINITE);
-					CloseHandle(threads[t]);
-				}
-				for (size_t t = 0; t < params.size(); t++)
-					delete params[t];
-				for (int j = 0; j < m_iEnumDevNum; j++)
-				{
-					if (!IsDevEnabled(j))
-						continue;
-					UninitWorkCapture(j);
-				}
-				return 0;
-			}
-			continue;
+			tp->ok = InitWorkCapture(i);
 		}
-		threads.push_back(h);
+		else
+		{
+			threads.push_back(h);
+		}
 		params.push_back(tp);
 	}
 
@@ -4523,15 +4568,12 @@ int DtCarFunction::StartFirmwarePrep()
 		delete tp;
 	}
 
-	if (!allOk)
+	for (size_t t = 0; t < params.size(); t++)
 	{
-		for (int j = 0; j < m_iEnumDevNum; j++)
-		{
-			if (!IsDevEnabled(j))
-				continue;
-			UninitWorkCapture(j);
-		}
-		return 0;
+		DtFirmwarePrepThreadParam* tp = params[t];
+		if (tp == NULL || tp->ok)
+			continue;
+		UninitWorkCapture(tp->devId);
 	}
 	if (started <= 0)
 	{

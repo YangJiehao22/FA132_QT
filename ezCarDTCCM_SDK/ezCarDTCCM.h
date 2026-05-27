@@ -144,6 +144,8 @@ DTCAR_API int carGetVcData(VcData_t **tVcData, int iVcID, int iDevID = DEFAULT_D
 /// @param iDevID：设备ID
 DTCAR_API int carGetPmuCurrent(int *iCurrent, int iCount, int iDevID = DEFAULT_DEV_ID);
 
+/// @brief FA132 96718 双芯片：切换当前 I2C 目标芯片（0=第一颗，1=第二颗）
+DTCAR_API int carSetChipID(int ChipID, int iDevID = DEFAULT_DEV_ID);
 
 /// @brief 读SESNOR寄存器,I2C通讯模式byI2cMode的设置值见I2CMODE定义
 ///

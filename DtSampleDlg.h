@@ -103,7 +103,7 @@ public:
 	void WaitForFwBurnThread(DWORD timeoutMs);
 	bool BeginFirmwarePrepAsync();
 	void BeginFirmwareBurnAsync();
-	void ContinueAfterFirmwareBurn(bool burnOk);
+	void ContinueAfterFirmwareBurn();
 	/** After Start or post-burn: optional power-cycle, 14-reg verify, then light test. */
 	void ScheduleFirmwareVerifyThenLightTest();
 	bool RunFirmwareBurnVerifyOrStop();
