@@ -64,6 +64,25 @@ CStringA AcpToUtf8(const char* acp, int byteLen)
 	return utf8;
 }
 
+CStringA WideToUtf8A(LPCTSTR widePath)
+{
+	CStringA empty;
+	if (widePath == NULL || widePath[0] == 0)
+		return empty;
+#ifdef _UNICODE
+	const int u8len = WideCharToMultiByte(CP_UTF8, 0, widePath, -1, NULL, 0, NULL, NULL);
+	if (u8len <= 1)
+		return empty;
+	CStringA utf8;
+	LPSTR p = utf8.GetBuffer(u8len - 1);
+	WideCharToMultiByte(CP_UTF8, 0, widePath, -1, p, u8len, NULL, NULL);
+	utf8.ReleaseBuffer(u8len - 1);
+	return utf8;
+#else
+	return AcpToUtf8(widePath);
+#endif
+}
+
 CString Utf8ToCString(const char* utf8, int byteLen)
 {
 #ifdef _UNICODE

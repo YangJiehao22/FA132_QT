@@ -63,6 +63,14 @@ static int ReadReg16(int devId, unsigned char slave, unsigned short reg, unsigne
 	return ::carReadSensorReg(slave, reg, outVal, kI2cMode, devId);
 }
 
+static int ReadReg16Mode(int devId, unsigned char slave, unsigned short reg,
+	unsigned short* outVal, unsigned char i2cMode)
+{
+	if (outVal == NULL)
+		return 0;
+	return ::carReadSensorReg(slave, reg, outVal, i2cMode, devId);
+}
+
 static int WriteI2cBlock(int devId, unsigned char slave, const unsigned char* data, unsigned short size)
 {
 	if (data == NULL || size == 0)
@@ -206,7 +214,7 @@ static const TCHAR* kFirmwareFovTypes[FIRMWARE_FOV_TYPE_COUNT] = {
 	_T("RABOB065200"),
 	_T("RABOM826200"),
 	_T("RABOM826100"),
-	_T("RABOM82660Flip"),
+	_T("RABOM826200Flip"),
 	_T("RABOM82660"),
 };
 
@@ -331,6 +339,51 @@ bool Sony031ReadSensorId(
 		CStringA idA(outResult->sensorIdHex);
 		msgUtf8(DtZh::kFwSensorIdOk, devId, vcId, idA.GetString());
 	}
+	return true;
+}
+
+bool Sony031ReadSensorTempC(
+	int devId,
+	int vcId,
+	const GateFirmwareBurnCfg& laneCfg,
+	unsigned char slaveHint,
+	const GateSensorTempI2c& tempCfg,
+	double* outTempC)
+{
+	if (outTempC == NULL || !tempCfg.enabled || tempCfg.divisor == 0.0)
+		return false;
+
+	if (!FirmwareSelectVcLane(devId, vcId, laneCfg))
+		return false;
+
+	unsigned char slave = 0;
+	if (!ResolveFlashSlave(devId, vcId, slaveHint, laneCfg.autoDetectSlave, &slave))
+	{
+		msgUtf8(DtZh::kFwSensorTempFail, devId, vcId, 0u);
+		return false;
+	}
+
+	USHORT vLo = 0;
+	USHORT vHi = 0;
+	if (ReadReg16Mode(devId, slave, tempCfg.regLow, &vLo, tempCfg.i2cMode) != 1)
+	{
+		msgUtf8(DtZh::kFwSensorTempFail, devId, vcId, (unsigned)slave);
+		return false;
+	}
+
+	double raw = (double)(vLo & 0xFF) * tempCfg.coeffLow;
+	if (tempCfg.regHigh != 0)
+	{
+		if (ReadReg16Mode(devId, slave, tempCfg.regHigh, &vHi, tempCfg.i2cMode) != 1)
+		{
+			msgUtf8(DtZh::kFwSensorTempFail, devId, vcId, (unsigned)slave);
+			return false;
+		}
+		raw += (double)(vHi & 0xFF) * tempCfg.coeffHigh;
+	}
+
+	*outTempC = raw / tempCfg.divisor + tempCfg.offset;
+	msgUtf8(DtZh::kFwSensorTempOk, devId, vcId, *outTempC, (unsigned)slave);
 	return true;
 }
 
@@ -480,8 +533,8 @@ static const unsigned char kExpectRabom826100[FW_VERIFY_REG_COUNT] = {
 	0x13, 0xB0, 0x19, 0x20, 0x10, 0x81, 0x01, 0x00, 0x20, 0x26, 0x04, 0x01, 0x09, 0x42
 };
 /* No separate table in Ruibo; same as RABOM82660 until product defines otherwise. */
-static const unsigned char kExpectRabom82660Flip[FW_VERIFY_REG_COUNT] = {
-	0x13, 0xD0, 0x19, 0x20, 0x10, 0x81, 0x01, 0x00, 0x20, 0x26, 0x03, 0x31, 0x19, 0x34
+static const unsigned char kExpectRabom826200Flip[FW_VERIFY_REG_COUNT] = {
+	0x13, 0xA0, 0x19, 0x20, 0x14, 0x41, 0x01, 0x00, 0x20, 0x26, 0x04, 0x01, 0x10, 0x09
 };
 static const unsigned char kExpectRabom82660[FW_VERIFY_REG_COUNT] = {
 	0x13, 0xD0, 0x19, 0x20, 0x10, 0x81, 0x01, 0x00, 0x20, 0x26, 0x03, 0x31, 0x19, 0x34
@@ -500,7 +553,7 @@ static const unsigned char* VerifyExpectForFov(int fovTypeIndex)
 	case 0: return kExpectRabob065200;      /* RABOB065200 */
 	case 1: return kExpectRabom826200;      /* RABOM826200 */
 	case 2: return kExpectRabom826100;      /* RABOM826100 */
-	case 3: return kExpectRabom82660Flip;   /* RABOM82660Flip */
+	case 3: return kExpectRabom826200Flip;   /* RABOM826200Flip */
 	case 4: return kExpectRabom82660;       /* RABOM82660 */
 	default: return NULL;
 	}

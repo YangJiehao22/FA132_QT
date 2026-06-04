@@ -255,35 +255,6 @@ static void GateIniFillLimits(LPCTSTR path, LPCTSTR section, const GateChannelLi
 	out->maxSensorTemp_C = GateIniDbl(path, section, _T("MaxSensorTemp_C"), fb.maxSensorTemp_C);
 }
 
-/** TempC = (b0*CoeffLow + b1*CoeffHigh) / Divisor + Offset; RegHigh=0 uses one byte only. */
-static bool ReadSensorTempC(int devId, int vcId, const GateSensorTempI2c& cfg,
-	const GateFirmwareBurnCfg& fwLane, double* outTempC)
-{
-	if (outTempC == NULL || !cfg.enabled)
-		return false;
-	if (cfg.divisor == 0.0)
-		return false;
-
-	if (!FirmwareSelectVcLane(devId, vcId, fwLane))
-		return false;
-
-	USHORT vLo = 0;
-	USHORT vHi = 0;
-	if (::carReadSensorReg(cfg.i2cAddr, cfg.regLow, &vLo, cfg.i2cMode, devId) != DT_ERROR_OK)
-		return false;
-
-	double raw = (double)(vLo & 0xFF) * cfg.coeffLow;
-	if (cfg.regHigh != 0)
-	{
-		if (::carReadSensorReg(cfg.i2cAddr, cfg.regHigh, &vHi, cfg.i2cMode, devId) != DT_ERROR_OK)
-			return false;
-		raw += (double)(vHi & 0xFF) * cfg.coeffHigh;
-	}
-
-	*outTempC = raw / cfg.divisor + cfg.offset;
-	return true;
-}
-
 namespace {
 
 static bool IsPackedGrayFormat(IMAGE_FORMAT fmt)
@@ -1674,6 +1645,7 @@ DtCarFunction::DtCarFunction()
 	memset(m_hWndVideo, 0, sizeof(m_hWndVideo));
 	memset(m_workPowerReady, 0, sizeof(m_workPowerReady));
 	memset(m_workGrabReady, 0, sizeof(m_workGrabReady));
+	memset(m_skipMainGrabReloadOnce, 0, sizeof(m_skipMainGrabReloadOnce));
 	memset(m_previewDisplayInit, 0, sizeof(m_previewDisplayInit));
 	for (int d = 0; d < MAX_CC16 * MAX_DEV; d++)
 		for (int v = 0; v < MAX_VC; v++)
@@ -1685,6 +1657,7 @@ DtCarFunction::DtCarFunction()
 	memset(m_grabTabValid, 0, sizeof(m_grabTabValid));
 	memset(m_grabTab, 0, sizeof(m_grabTab));
 	m_specDelayMs = 2000;
+	m_specPostI2cDelayMs = 2000;
 	m_dwProductionRunStartTick = 0;
 	m_bProductionRunActive = FALSE;
 	m_bLightGateHasResult = false;
@@ -1698,6 +1671,9 @@ DtCarFunction::DtCarFunction()
 	m_bSensorIdHasResult = false;
 	memset(m_bSensorIdReadOk, 0, sizeof(m_bSensorIdReadOk));
 	memset(m_sensorIdHex, 0, sizeof(m_sensorIdHex));
+	m_bSensorTempHasResult = false;
+	memset(m_hasSensorTemp, 0, sizeof(m_hasSensorTemp));
+	memset(m_sensorTempC, 0, sizeof(m_sensorTempC));
 	m_bFirmwareBurnVerifyHasResult = false;
 	memset(m_bFirmwareBurnVerifyPass, 0, sizeof(m_bFirmwareBurnVerifyPass));
 	m_hwndFirmwareBurnProgress = NULL;
@@ -2071,12 +2047,16 @@ int DtCarFunction::ReadGateSpecIni()
 		m_gateBadPixelDark = GateDefaultBadPixelDark();
 		m_gateFirmwareBurn = GateDefaultFirmwareBurn();
 		m_specDelayMs = 2000;
+	m_specPostI2cDelayMs = 2000;
 		SaveGateSpecIni();
 	}
 
 	m_specDelayMs = GetIniFileInt(_T("timing"), _T("DelayMs"), m_specDelayMs, m_strGateSpecIniPath);
 	if (m_specDelayMs < 200)
 		m_specDelayMs = 200;
+	m_specPostI2cDelayMs = GetIniFileInt(_T("timing"), _T("PostI2cDelayMs"), m_specPostI2cDelayMs, m_strGateSpecIniPath);
+	if (m_specPostI2cDelayMs < 0)
+		m_specPostI2cDelayMs = 0;
 
 	const GateChannelLimits kFb = { 1.0, 200.0, 0.0, 2000.0, -40.0, 125.0 };
 	GateIniFillLimits(m_strGateSpecIniPath, _T("limits"), kFb, &m_gateDefault);
@@ -2109,6 +2089,16 @@ int DtCarFunction::ReadGateSpecIni()
 			hostA.GetString(), m_gateTcpNotify.peerPort);
 	}
 	return 1;
+}
+
+int DtCarFunction::LightTestSettleMsAfterI2c() const
+{
+	const GateFirmwareBurnCfg& fw = m_gateFirmwareBurn;
+	if (fw.enabled)
+		return 0;
+	if (!fw.readSensorIdEnabled && !fw.verifyEnabled)
+		return 0;
+	return (m_specPostI2cDelayMs > 0) ? m_specPostI2cDelayMs : 0;
 }
 
 static bool GateLimEqual(const GateChannelLimits& a, const GateChannelLimits& b)
@@ -2260,6 +2250,10 @@ int DtCarFunction::SaveGateSpecIni()
 	if (delay < 200)
 		delay = 200;
 	m_specDelayMs = delay;
+	int postI2c = m_specPostI2cDelayMs;
+	if (postI2c < 0)
+		postI2c = 0;
+	m_specPostI2cDelayMs = postI2c;
 
 	const GateChannelLimits& L = m_gateDefault;
 	const GateSensorTempI2c& t = m_gateSensorTempI2c;
@@ -2286,6 +2280,8 @@ int DtCarFunction::SaveGateSpecIni()
 	CStringA v;
 	v.Format("%d", delay);
 	ReplaceTokenA(tplUtf8, "{{DELAY_MS}}", v);
+	v.Format("%d", postI2c);
+	ReplaceTokenA(tplUtf8, "{{POST_I2C_DELAY_MS}}", v);
 	v.Format("%.3f", L.minSsrFps);
 	ReplaceTokenA(tplUtf8, "{{MIN_SSR_FPS}}", v);
 	v.Format("%.3f", L.maxSsrFps);
@@ -2348,22 +2344,8 @@ int DtCarFunction::SaveGateSpecIni()
 	ReplaceTokenA(tplUtf8, "{{BP_SAVE_U12}}", v);
 	v.Format("%d", bp.saveUnpack10 ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{BP_SAVE_U10}}", v);
-	{
-		CStringA dirA;
-#ifdef _UNICODE
-		const int dirLen = (int)_tcslen(bp.saveDir);
-		const int dirAcpLen = WideCharToMultiByte(CP_ACP, 0, bp.saveDir, dirLen, NULL, 0, NULL, NULL);
-		if (dirAcpLen > 0)
-		{
-			LPSTR p = dirA.GetBuffer(dirAcpLen);
-			WideCharToMultiByte(CP_ACP, 0, bp.saveDir, dirLen, p, dirAcpLen, NULL, NULL);
-			dirA.ReleaseBuffer(dirAcpLen);
-		}
-#else
-		dirA = bp.saveDir;
-#endif
-		ReplaceTokenA(tplUtf8, "{{BP_DIR}}", dirA);
-	}
+	/* SaveDir may contain Chinese: must be UTF-8 in template (not CP_ACP embedded in UTF-8). */
+	ReplaceTokenA(tplUtf8, "{{BP_DIR}}", WideToUtf8A(bp.saveDir));
 	v.Format("%d", fw.enabled ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{FW_EN}}", v);
 	v.Format("%d", fw.fovTypeIndex);
@@ -2398,22 +2380,8 @@ int DtCarFunction::SaveGateSpecIni()
 	ReplaceTokenA(tplUtf8, "{{FW_VERIFY_BEFORE_GRAB}}", v);
 	v.Format("%d", fw.readSensorIdEnabled ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{FW_READ_SENSOR_ID}}", v);
-	{
-		CStringA grabA;
-#ifdef _UNICODE
-		const int grabLen = (int)_tcslen(fw.grabIniAfterPowerCycle);
-		const int grabAcpLen = WideCharToMultiByte(CP_ACP, 0, fw.grabIniAfterPowerCycle, grabLen, NULL, 0, NULL, NULL);
-		if (grabAcpLen > 0)
-		{
-			LPSTR p = grabA.GetBuffer(grabAcpLen);
-			WideCharToMultiByte(CP_ACP, 0, fw.grabIniAfterPowerCycle, grabLen, p, grabAcpLen, NULL, NULL);
-			grabA.ReleaseBuffer(grabAcpLen);
-		}
-#else
-		grabA = fw.grabIniAfterPowerCycle;
-#endif
-		ReplaceTokenA(tplUtf8, "{{FW_GRAB_INI_AFTER_PC}}", grabA);
-	}
+	/* GrabIniAfterPowerCycle may contain Chinese path segments (same UTF-8 rule as SaveDir). */
+	ReplaceTokenA(tplUtf8, "{{FW_GRAB_INI_AFTER_PC}}", WideToUtf8A(fw.grabIniAfterPowerCycle));
 
 	/* SaveGateSpecIni: [tcp_notify] tokens for GateSpec.template.utf8 */
 	const GateTcpNotifyCfg& tn = m_gateTcpNotify;
@@ -2441,6 +2409,11 @@ int DtCarFunction::SaveGateSpecIni()
 	const CStringA iniAcp = Utf8ToAcp(tplUtf8, tplUtf8.GetLength());
 	if (!WriteAcpIniFile(path, iniAcp))
 		return 0;
+
+	/* Paths with Chinese: WritePrivateProfileString avoids template UTF-8/ACP mix (no ???? in ini). */
+	WriteIniFileString(_T("firmware_burn"), _T("GrabIniAfterPowerCycle"), fw.grabIniAfterPowerCycle, path);
+	WriteIniFileString(_T("bad_pixel_dark"), _T("SaveDir"), bp.saveDir, path);
+	FlushIniFile(path);
 
 	for (int d = 0; d < kGateSpecIniDevSlots; d++)
 	{
@@ -2509,6 +2482,9 @@ void DtCarFunction::ClearLightGateResults()
 	m_bSensorIdHasResult = false;
 	memset(m_bSensorIdReadOk, 0, sizeof(m_bSensorIdReadOk));
 	memset(m_sensorIdHex, 0, sizeof(m_sensorIdHex));
+	m_bSensorTempHasResult = false;
+	memset(m_hasSensorTemp, 0, sizeof(m_hasSensorTemp));
+	memset(m_sensorTempC, 0, sizeof(m_sensorTempC));
 	m_bFirmwareBurnVerifyHasResult = false;
 	memset(m_bFirmwareBurnVerifyPass, 0, sizeof(m_bFirmwareBurnVerifyPass));
 }
@@ -2541,6 +2517,18 @@ struct DtFirmwareBurnThreadParam
 	unsigned char slaveHint;
 };
 
+static void CacheSensorLaneTemp(DtCarFunction* fn, int dev, int vc,
+	const GateFirmwareBurnCfg& fwCfg, unsigned char slaveHint)
+{
+	if (fn == NULL || !fn->m_gateSensorTempI2c.enabled)
+		return;
+	double tempC = 0.0;
+	const bool ok = Sony031ReadSensorTempC(dev, vc, fwCfg, slaveHint,
+		fn->m_gateSensorTempI2c, &tempC);
+	fn->m_hasSensorTemp[dev][vc] = ok;
+	fn->m_sensorTempC[dev][vc] = ok ? tempC : 0.0;
+}
+
 unsigned __stdcall DtCarFunction::FirmwareSensorIdThreadProc(void* p)
 {
 	DtFirmwareBurnThreadParam* tp = (DtFirmwareBurnThreadParam*)p;
@@ -2549,18 +2537,32 @@ unsigned __stdcall DtCarFunction::FirmwareSensorIdThreadProc(void* p)
 	DtCarFunction* fn = tp->fn;
 	const int dev = tp->devId;
 	const int vc = tp->vcId;
-	Sony031SensorIdResult sr = {};
-	const bool ok = Sony031ReadSensorId(dev, vc, tp->cfg, tp->slaveHint, &sr);
-	fn->m_bSensorIdReadOk[dev][vc] = ok;
-	if (ok)
-		_tcsncpy_s(fn->m_sensorIdHex[dev][vc], sr.sensorIdHex, _TRUNCATE);
-	else
+	bool threadOk = true;
+
+	if (fn->m_gateFirmwareBurn.readSensorIdEnabled)
 	{
-		fn->m_sensorIdHex[dev][vc][0] = 0;
-		fn->m_fwBurnErrCode[dev][vc] = sr.errorCode != 0 ? sr.errorCode : 2;
+		Sony031SensorIdResult sr = {};
+		const bool ok = Sony031ReadSensorId(dev, vc, tp->cfg, tp->slaveHint, &sr);
+		fn->m_bSensorIdReadOk[dev][vc] = ok;
+		if (ok)
+			_tcsncpy_s(fn->m_sensorIdHex[dev][vc], sr.sensorIdHex, _TRUNCATE);
+		else
+		{
+			fn->m_sensorIdHex[dev][vc][0] = 0;
+			fn->m_fwBurnErrCode[dev][vc] = sr.errorCode != 0 ? sr.errorCode : 2;
+			threadOk = false;
+		}
 	}
+
+	if (fn->m_gateSensorTempI2c.enabled)
+	{
+		CacheSensorLaneTemp(fn, dev, vc, tp->cfg, tp->slaveHint);
+		if (!fn->m_hasSensorTemp[dev][vc])
+			threadOk = false;
+	}
+
 	delete tp;
-	return ok ? 0 : 1;
+	return threadOk ? 0 : 1;
 }
 
 unsigned __stdcall DtCarFunction::FirmwareBurnThreadProc(void* p)
@@ -2767,6 +2769,148 @@ static void JoinFirmwareWorkerThreads(std::vector<HANDLE>& handles)
 	handles.clear();
 }
 
+bool DtCarFunction::RunSensorIdReadParallel()
+{
+	const bool readId = m_gateFirmwareBurn.readSensorIdEnabled;
+	const bool readTemp = m_gateSensorTempI2c.enabled;
+	if (!readId && !readTemp)
+	{
+		msgUtf8(DtZh::kFwSensorIdSkipIni);
+		return true;
+	}
+	if (m_iEnumDevNum <= 0)
+	{
+		msgUtf8(DtZh::kFwNeedOpen);
+		return false;
+	}
+
+	if (readId)
+	{
+		m_bSensorIdHasResult = true;
+		memset(m_bSensorIdReadOk, 0, sizeof(m_bSensorIdReadOk));
+		memset(m_sensorIdHex, 0, sizeof(m_sensorIdHex));
+	}
+	if (readTemp)
+	{
+		m_bSensorTempHasResult = true;
+		memset(m_hasSensorTemp, 0, sizeof(m_hasSensorTemp));
+		memset(m_sensorTempC, 0, sizeof(m_sensorTempC));
+	}
+
+	const GateFirmwareBurnCfg& fwCfg = m_gateFirmwareBurn;
+	const int chipPhases = FirmwareChipPhaseCount(fwCfg);
+
+	for (int d = 0; d < m_iEnumDevNum; d++)
+	{
+		if (!IsDevEnabled(d))
+			continue;
+		if (!m_workGrabReady[d])
+		{
+			if (!InitWorkCapture(d))
+			{
+				msgUtf8(DtZh::kFwPrepDevInitFail, d);
+				continue;
+			}
+		}
+		if (!FirmwareBurnSetupDevI2c(d, fwCfg))
+			continue;
+	}
+
+	if (readId)
+		msgUtf8(DtZh::kFwSensorIdStart);
+	if (readTemp)
+		msgUtf8(DtZh::kFwSensorTempStart);
+	for (int chipPhase = 0; chipPhase < chipPhases; chipPhase++)
+	{
+		if (fwCfg.fa132DualChip)
+			msgUtf8(DtZh::kLogFwChipPhaseSensorId, chipPhase);
+		std::vector<HANDLE> idThreads;
+		for (int d = 0; d < m_iEnumDevNum; d++)
+		{
+			if (!IsDevEnabled(d))
+				continue;
+			for (int v = 0; v < m_iVcNum; v++)
+			{
+				if (!IsVcEnabled(d, v))
+					continue;
+				if (!VcOnFirmwareChipPhase(v, chipPhase, fwCfg))
+					continue;
+				DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
+				tp->fn = this;
+				tp->devId = d;
+				tp->vcId = v;
+				tp->cfg = fwCfg;
+				tp->slaveHint = m_gateTempI2cAddr[d][v];
+				unsigned threadId = 0;
+				HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareSensorIdThreadProc, tp, 0, &threadId);
+				if (h == NULL)
+				{
+					delete tp;
+					msgUtf8(DtZh::kLogFwThreadFail, d, v);
+					if (readId)
+					{
+						Sony031SensorIdResult sr = {};
+						if (!Sony031ReadSensorId(d, v, fwCfg, m_gateTempI2cAddr[d][v], &sr))
+						{
+							m_bSensorIdReadOk[d][v] = false;
+							m_fwBurnErrCode[d][v] = 2;
+						}
+						else
+						{
+							m_bSensorIdReadOk[d][v] = true;
+							_tcsncpy_s(m_sensorIdHex[d][v], sr.sensorIdHex, _TRUNCATE);
+						}
+					}
+					if (readTemp)
+						CacheSensorLaneTemp(this, d, v, fwCfg, m_gateTempI2cAddr[d][v]);
+					continue;
+				}
+				idThreads.push_back(h);
+			}
+		}
+		JoinFirmwareWorkerThreads(idThreads);
+	}
+
+	bool idAllPass = true;
+	if (readId)
+	{
+		for (int d = 0; d < m_iEnumDevNum; d++)
+		{
+			if (!IsDevEnabled(d))
+				continue;
+			for (int v = 0; v < m_iVcNum; v++)
+			{
+				if (!IsVcEnabled(d, v))
+					continue;
+				if (!m_bSensorIdReadOk[d][v])
+					idAllPass = false;
+			}
+		}
+		if (!idAllPass)
+			msgUtf8(DtZh::kFwSensorIdParallelFail);
+	}
+
+	bool tempAllPass = true;
+	if (readTemp)
+	{
+		for (int d = 0; d < m_iEnumDevNum; d++)
+		{
+			if (!IsDevEnabled(d))
+				continue;
+			for (int v = 0; v < m_iVcNum; v++)
+			{
+				if (!IsVcEnabled(d, v))
+					continue;
+				if (!m_hasSensorTemp[d][v])
+					tempAllPass = false;
+			}
+		}
+		if (!tempAllPass)
+			msgUtf8(DtZh::kFwSensorTempParallelFail);
+	}
+	return true;
+}
+
 bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 {
 	if (!m_gateFirmwareBurn.enabled)
@@ -2798,9 +2942,6 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 	m_bFirmwareBurnInProgress = true;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
 	memset(m_fwBurnErrCode, 0, sizeof(m_fwBurnErrCode));
-	m_bSensorIdHasResult = false;
-	memset(m_bSensorIdReadOk, 0, sizeof(m_bSensorIdReadOk));
-	memset(m_sensorIdHex, 0, sizeof(m_sensorIdHex));
 
 	FirmwareBurnSetProgressTarget(m_hwndFirmwareBurnProgress);
 
@@ -2856,76 +2997,7 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 		devBurnReady[d] = true;
 	}
 
-	if (m_gateFirmwareBurn.readSensorIdEnabled)
-	{
-		msgUtf8(DtZh::kFwSensorIdStart);
-		m_bSensorIdHasResult = true;
-		for (int chipPhase = 0; chipPhase < chipPhases; chipPhase++)
-		{
-			if (fwCfg.fa132DualChip)
-				msgUtf8(DtZh::kLogFwChipPhaseSensorId, chipPhase);
-			std::vector<HANDLE> idThreads;
-			for (int d = 0; d < m_iEnumDevNum; d++)
-			{
-				if (!IsDevEnabled(d))
-					continue;
-				for (int v = 0; v < m_iVcNum; v++)
-				{
-					if (!IsVcEnabled(d, v))
-						continue;
-					if (!VcOnFirmwareChipPhase(v, chipPhase, fwCfg))
-						continue;
-					DtFirmwareBurnThreadParam* tp = new DtFirmwareBurnThreadParam;
-					tp->fn = this;
-					tp->devId = d;
-					tp->vcId = v;
-					tp->cfg = fwCfg;
-					tp->slaveHint = m_gateTempI2cAddr[d][v];
-					unsigned threadId = 0;
-					HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::FirmwareSensorIdThreadProc, tp, 0, &threadId);
-					if (h == NULL)
-					{
-						delete tp;
-						msgUtf8(DtZh::kLogFwThreadFail, d, v);
-						Sony031SensorIdResult sr = {};
-						if (!Sony031ReadSensorId(d, v, fwCfg, m_gateTempI2cAddr[d][v], &sr))
-						{
-							m_bSensorIdReadOk[d][v] = false;
-							m_fwBurnErrCode[d][v] = 2;
-						}
-						else
-						{
-							m_bSensorIdReadOk[d][v] = true;
-							_tcsncpy_s(m_sensorIdHex[d][v], sr.sensorIdHex, _TRUNCATE);
-						}
-						continue;
-					}
-					idThreads.push_back(h);
-				}
-			}
-			JoinFirmwareWorkerThreads(idThreads);
-		}
-
-		bool idAllPass = true;
-		for (int d = 0; d < m_iEnumDevNum; d++)
-		{
-			if (!IsDevEnabled(d))
-				continue;
-			for (int v = 0; v < m_iVcNum; v++)
-			{
-				if (!IsVcEnabled(d, v))
-					continue;
-				if (!m_bSensorIdReadOk[d][v])
-					idAllPass = false;
-			}
-		}
-		if (!idAllPass)
-			msgUtf8(DtZh::kFwSensorIdParallelFail);
-	}
-	else
-	{
-		msgUtf8(DtZh::kFwSensorIdSkipIni);
-	}
+	RunSensorIdReadParallel();
 
 	for (int chipPhase = 0; chipPhase < chipPhases; chipPhase++)
 	{
@@ -4052,10 +4124,16 @@ static bool RunLightGateOneChannel(DtCarFunction* fn, int d, int v,
 		return false;
 
 	const GateChannelLimits& L = fn->m_gatePerChannel[d][v];
-	GateSensorTempI2c tempCfg = fn->m_gateSensorTempI2c;
-	tempCfg.i2cAddr = fn->m_gateTempI2cAddr[d][v];
 	double tempC = 0.0;
-	const bool hasTemp = ReadSensorTempC(d, v, tempCfg, fn->m_gateFirmwareBurn, &tempC);
+	bool hasTemp = false;
+	if (fn->m_gateSensorTempI2c.enabled)
+	{
+		if (fn->m_bSensorTempHasResult && fn->m_hasSensorTemp[d][v])
+		{
+			hasTemp = true;
+			tempC = fn->m_sensorTempC[d][v];
+		}
+	}
 
 	::carGetChannelData(&fn->m_tVcData[d][v], v, d);
 	const double ssr = fn->m_tVcData[d][v].dSsrFrameRate;
@@ -4063,7 +4141,7 @@ static bool RunLightGateOneChannel(DtCarFunction* fn, int d, int v,
 	const bool okSsr = (ssr >= L.minSsrFps) && (ssr <= L.maxSsrFps);
 	const bool okCur = (cur_mA >= L.minCurrent_mA) && (cur_mA <= L.maxCurrent_mA);
 	bool okTemp = true;
-	if (tempCfg.enabled)
+	if (fn->m_gateSensorTempI2c.enabled)
 	{
 		okTemp = hasTemp
 			&& (tempC >= L.minSensorTemp_C) && (tempC <= L.maxSensorTemp_C);
@@ -4081,8 +4159,10 @@ static bool RunLightGateOneChannel(DtCarFunction* fn, int d, int v,
 	const bool okFwVerify = (!fn->m_gateFirmwareBurn.verifyEnabled
 		|| !fn->m_bFirmwareBurnVerifyHasResult
 		|| fn->m_bFirmwareBurnVerifyPass[d][v]);
+	const bool okSensorId = (!fn->m_gateFirmwareBurn.readSensorIdEnabled
+		|| !fn->m_bSensorIdHasResult || fn->m_bSensorIdReadOk[d][v]);
 	const bool okFw = okFwBurn && okFwVerify;
-	const bool pass = okSsr && okCur && okTemp && okBadPx && okFw;
+	const bool pass = okSsr && okCur && okTemp && okBadPx && okFw && okSensorId;
 
 	fn->m_bLightGatePass[d][v] = pass;
 
@@ -4112,7 +4192,10 @@ static bool RunLightGateOneChannel(DtCarFunction* fn, int d, int v,
 	rec.imageBmp = bmpPath;
 	rec.imageRawUnpacked = rawPath;
 	rec.measureSkipped = false;
-	rec.failStage = pass ? PROD_STAGE_OK : PROD_STAGE_LIGHT;
+	if (!pass && !okSensorId && fn->m_gateFirmwareBurn.readSensorIdEnabled && fn->m_bSensorIdHasResult)
+		rec.failStage = PROD_STAGE_SENSOR_ID;
+	else
+		rec.failStage = pass ? PROD_STAGE_OK : PROD_STAGE_LIGHT;
 	FillProductionFwFields(fn, d, v, rec);
 
 	const TCHAR* fwTag = _T("N/A");
@@ -4556,24 +4639,52 @@ bool DtCarFunction::InitWorkCapture(int devId)
 	if (m_workPowerReady[devId] && m_workGrabReady[devId])
 		return true;
 
-	int iRet = ::carInitPower(devId);
-	msgUtf8(DtZh::kLogDevInitPower, devId, iRet);
-	if (iRet != DT_ERROR_OK)
-		return false;
-	m_workPowerReady[devId] = true;
+	const bool hadPowerBefore = m_workPowerReady[devId];
 
-	iRet = ::carInitGrab(devId);
+	/* Verify-only re-Start: reload main sensor INI (Open path). Never after burn post-PC 点亮 INI. */
+	bool skipMainReload = m_skipMainGrabReloadOnce[devId];
+	if (m_skipMainGrabReloadOnce[devId])
+		m_skipMainGrabReloadOnce[devId] = false;
+	if (!skipMainReload && !m_workGrabReady[devId] && !m_gateFirmwareBurn.enabled
+		&& !m_strSensorIniPath.IsEmpty())
+	{
+		const int lr = ::carLoadGrabPara(m_strSensorIniPath.GetBuffer(), devId);
+		m_strSensorIniPath.ReleaseBuffer();
+		msgUtf8(DtZh::kLogDevReloadGrabPara, devId, lr);
+		if (lr == DT_ERROR_OK)
+		{
+			GrabTab pGrabTab;
+			if (::carGetGrabPara(&pGrabTab, devId) == DT_ERROR_OK)
+			{
+				m_grabTab[devId] = pGrabTab;
+				m_grabTabValid[devId] = true;
+			}
+		}
+		else
+			m_grabTabValid[devId] = false;
+	}
+
+	if (!hadPowerBefore)
+	{
+		const int pwrRet = ::carInitPower(devId);
+		msgUtf8(DtZh::kLogDevInitPower, devId, pwrRet);
+		if (pwrRet != DT_ERROR_OK)
+			return false;
+		m_workPowerReady[devId] = true;
+	}
+
+	const int iRet = ::carInitGrab(devId);
 	msgUtf8(DtZh::kLogDevInitGrab, devId, iRet);
 	if (iRet != DT_ERROR_OK)
 	{
-		UninitWorkCapture(devId);
+		UninitWorkCapture(devId, true);
 		return false;
 	}
 	m_workGrabReady[devId] = true;
 	return true;
 }
 
-void DtCarFunction::UninitWorkCapture(int devId)
+void DtCarFunction::UninitWorkCapture(int devId, bool unitPower)
 {
 	if (devId < 0 || devId >= MAX_CC16 * MAX_DEV)
 		return;
@@ -4582,10 +4693,21 @@ void DtCarFunction::UninitWorkCapture(int devId)
 		::carUnitGrab(devId);
 		m_workGrabReady[devId] = false;
 	}
-	if (m_workPowerReady[devId])
+	if (unitPower && m_workPowerReady[devId])
 	{
 		::carUnitPower(devId);
 		m_workPowerReady[devId] = false;
+	}
+}
+
+void DtCarFunction::RestartGrabForLightTest()
+{
+	for (int i = 0; i < m_iEnumDevNum; i++)
+	{
+		if (!IsDevEnabled(i) || !m_workGrabReady[i])
+			continue;
+		const int iRet = ::carGrabRestart(0.0, 0, i);
+		msgUtf8(DtZh::kLogDevGrabRestart, i, iRet);
 	}
 }
 
@@ -4599,13 +4721,13 @@ bool DtCarFunction::ReloadGrabParaAfterPowerCycle()
 	}
 	if (::GetFileAttributes(iniPath) == INVALID_FILE_ATTRIBUTES)
 	{
-		CStringA pathA(iniPath);
-		msgUtf8(DtZh::kFwGrabIniAfterPcMissing, (LPCSTR)pathA);
+		const CStringA pathUtf8 = WideToUtf8A(iniPath);
+		msgUtf8(DtZh::kFwGrabIniAfterPcMissing, (LPCSTR)pathUtf8);
 		return false;
 	}
 
-	CStringA pathLog(iniPath);
-	msgUtf8(DtZh::kFwGrabIniReloadBegin, (LPCSTR)pathLog);
+	const CStringA pathUtf8 = WideToUtf8A(iniPath);
+	msgUtf8(DtZh::kFwGrabIniReloadBegin, (LPCSTR)pathUtf8);
 
 	int okCount = 0;
 	int failCount = 0;
@@ -4637,6 +4759,7 @@ bool DtCarFunction::ReloadGrabParaAfterPowerCycle()
 		}
 		m_grabTab[i] = tab;
 		m_grabTabValid[i] = true;
+		m_skipMainGrabReloadOnce[i] = true;
 		okCount++;
 		msgUtf8(DtZh::kFwGrabIniReloadDevOk, i);
 	}
@@ -4814,6 +4937,7 @@ int DtCarFunction::Stop() {
 	RequestStopCapture();
 	m_bRunning = FALSE;
 	m_bPauseCaptureForBurn = false;
+	m_bSuppressWorkDraw = false;
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
 		if (!IsDevEnabled(i) || m_hThread[i] == NULL)
@@ -4824,7 +4948,8 @@ int DtCarFunction::Stop() {
 	{
 		if (!IsDevEnabled(i))
 			continue;
-		UninitWorkCapture(i);
+		UninitWorkCapture(i, true);
+		m_skipMainGrabReloadOnce[i] = false;
 	}
 
 	return 1;

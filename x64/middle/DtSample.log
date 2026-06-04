@@ -1,41 +1,50 @@
-﻿生成启动时间为 2026/5/27 17:08:10。
+﻿生成启动时间为 2026/6/2 16:59:53。
      1>项目“D:\FA132\dothinkey_ez_car_sdk_20260312\DtCarTestSample_MFC_DT\DtSample.vcxproj”在节点 2 上(Build 个目标)。
      1>C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(363,5): warning MSB8004: Intermediate Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Intermediate Directory.
      1>ClCompile:
-         D:\VS2013\VC\bin\x86_amd64\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /GL /D WIN32 /D _WINDOWS /D NDEBUG /D _MBCS /D _AFXDLL /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yu"stdafx.h" /Fp"x64\middle\QtechCalibration.pch" /Fo"x64\middle\\" /Fd"x64\middle\vc120.pdb" /Gd /TP /errorReport:prompt DtCarFunction.cpp DtChannelDlg.cpp DtEncoding.cpp DtFirmwareBurn.cpp DtSample.cpp DtSampleDlg.cpp DtSpecDlg.cpp DtTcpNotify.cpp I2CDebug.cpp
+         D:\VS2013\VC\bin\x86_amd64\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /GL /D WIN32 /D _WINDOWS /D NDEBUG /D _MBCS /D _AFXDLL /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yc"stdafx.h" /Fp"x64\middle\QtechCalibration.pch" /Fo"x64\middle\\" /Fd"x64\middle\vc120.pdb" /Gd /TP /errorReport:prompt stdafx.cpp
+         stdafx.cpp
+     1>D:\VS2013\VC\atlmfc\include\afx.h(38): warning C4996: 'MBCS_Support_Deprecated_In_MFC': MBCS support in MFC is deprecated and may be removed in a future version of MFC.
+                 D:\VS2013\VC\atlmfc\include\afx.h(33) : 参见“MBCS_Support_Deprecated_In_MFC”的声明
+         D:\VS2013\VC\bin\x86_amd64\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /GL /D WIN32 /D _WINDOWS /D NDEBUG /D _MBCS /D _AFXDLL /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yu"stdafx.h" /Fp"x64\middle\QtechCalibration.pch" /Fo"x64\middle\\" /Fd"x64\middle\vc120.pdb" /Gd /TP /errorReport:prompt DtDpiUi.cpp DtEncoding.cpp DtBadPixelDetect.cpp DtHotPixelAlgo.cpp DtLightTestReport.cpp DtTcpNotify.cpp DtCarFunction.cpp DtFirmwareBurn.cpp DtSpecDlg.cpp DtChannelDlg.cpp DtFileOperate.cpp DtSample.cpp DtSampleDlg.cpp I2CDebug.cpp
+         DtDpiUi.cpp
+         DtEncoding.cpp
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(122): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+         DtBadPixelDetect.cpp
+         DtHotPixelAlgo.cpp
+         DtLightTestReport.cpp
+         DtTcpNotify.cpp
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(122): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
          DtCarFunction.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(123): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtCarFunction.cpp(2099): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtCarFunction.cpp(4136): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-         DtChannelDlg.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(123): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-         DtEncoding.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(123): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(122): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>DtCarFunction.cpp(2094): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>DtCarFunction.cpp(4159): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
          DtFirmwareBurn.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(123): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(122): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+         DtSpecDlg.cpp
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(122): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>DtSpecDlg.cpp(872): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+         DtChannelDlg.cpp
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(122): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+         DtFileOperate.cpp
          DtSample.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
          DtSampleDlg.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(123): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtSampleDlg.cpp(613): warning C4102: “update_start_btn”: 未引用的标签
-         DtSpecDlg.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(123): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-     1>DtSpecDlg.cpp(887): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-         DtTcpNotify.cpp
-     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(123): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\DtZhUtf8.h(122): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+     1>DtSampleDlg.cpp(624): warning C4102: “update_start_btn”: 未引用的标签
          I2CDebug.cpp
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezCarDTCCM_SDK/ezCarDTCCM.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
      1>d:\fa132\dothinkey_ez_car_sdk_20260312\dtcartestsample_mfc_dt\ezcardtccm_sdk\ezCarDtccmDef.h : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
@@ -77,4 +86,4 @@
 
 生成成功。
 
-已用时间 00:00:04.35
+已用时间 00:00:07.17

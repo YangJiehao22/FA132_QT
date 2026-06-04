@@ -98,12 +98,16 @@ public:
 	DWORD m_fwBurnHandledGen;
 	BOOL m_bFwPowerCyclePending;
 	BOOL m_bPreviewFrozen;
+	/** STREAM_GATE phase-2: wait after I2C before sampling fps for light test. */
+	BOOL m_bLightTestAfterI2cSettle;
 
 	void WaitForFwPrepThread(DWORD timeoutMs);
 	void WaitForFwBurnThread(DWORD timeoutMs);
 	bool BeginFirmwarePrepAsync();
 	void BeginFirmwareBurnAsync();
 	void ContinueAfterFirmwareBurn();
+	/** Enabled=0: read SensorID after Start + DelayMs (stream up), not in Prep. */
+	void RunSensorIdAfterStreamIfNeeded();
 	/** After Start or post-burn: optional power-cycle, 14-reg verify, then light test. */
 	void ScheduleFirmwareVerifyThenLightTest();
 	bool RunFirmwareBurnVerifyOrStop();
@@ -119,10 +123,15 @@ public:
 	void ClearFwBurnCellOverlay(bool invalidateCells = true);
 	bool AnyFirmwareBurnChannelFailed() const;
 	void PaintPreviewCellsBurnResult();
+	void PaintPreviewCellsBurnSticky();
 	void ResetFwBurnCellOverlay();
 	void InvalidateEnabledPreviewCells();
 	void PaintPreviewCellsTestResult();
 	void PaintPreviewCellsIdle();
-	void PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF bg, COLORREF fg);
+	void PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF bg, COLORREF fg, bool dashedBorder = false);
+	void PaintPreviewCellOff(int dev, int vc);
+	void PaintPreviewCellWait(int dev, int vc);
+	void PaintPreviewCellBurnOk(int dev, int vc);
 	void PaintPreviewCellFirmware(int dev, int vc);
+	bool IsPreviewChannelOn(int dev, int vc) const;
 };

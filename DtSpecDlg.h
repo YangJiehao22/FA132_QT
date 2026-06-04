@@ -127,6 +127,9 @@ protected:
 	int m_specBtnBandH;
 	int m_specBtnH;
 	int m_specBtnW;
+	int m_specScrollPos;
+	int m_specContentH;
+	int m_specVisibleContentH;
 
 	void ApplyDialogFonts();
 	void EnsureStandardCheckAndRadioButtons();
@@ -146,6 +149,9 @@ protected:
 	void HideBadPixelPageControls();
 	void HideFirmwarePageControls();
 	void HideAllSpecPageControls();
+	void ClipActiveSpecPageControls(int visTop, int visBottom);
+	void ApplySpecScroll(int newPos);
+	int SpecChromeHeightPx(double scale) const;
 	double GetSpecUiScale() const;
 	int MeasureMaxPageHeight(const CRect& viewport, double scale);
 	int LayoutGatePage(const CRect& viewport, double scale, bool bShow);
@@ -156,6 +162,8 @@ protected:
 	afx_msg void OnBnClickedBtnFwGrabBrowse();
 	afx_msg void OnCbnSelchangeFwFov();
 	afx_msg LRESULT OnDpiChanged(WPARAM wParam, LPARAM lParam);
+	afx_msg void OnVScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
+	afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
 	void UpdateBadPixelLabels();
 	void UpdateBadPixelAlgoUi();
 	void UpdateBadPixelSnapTypeUi();

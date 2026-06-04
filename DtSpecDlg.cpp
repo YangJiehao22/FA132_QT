@@ -171,6 +171,9 @@ CDtSpecDlg::CDtSpecDlg(DtCarFunction* pFn, CWnd* pParent)
 	, m_specBtnBandH(0)
 	, m_specBtnH(0)
 	, m_specBtnW(0)
+	, m_specScrollPos(0)
+	, m_specContentH(0)
+	, m_specVisibleContentH(0)
 {
 }
 
@@ -273,6 +276,8 @@ BEGIN_MESSAGE_MAP(CDtSpecDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_SPEC_FW_GRAB_BROWSE, &CDtSpecDlg::OnBnClickedBtnFwGrabBrowse)
 	ON_BN_CLICKED(IDC_CHK_SPEC_FW_EN, &CDtSpecDlg::OnBnClickedChkFwEn)
 	ON_MESSAGE(WM_DPICHANGED, &CDtSpecDlg::OnDpiChanged)
+	ON_WM_VSCROLL()
+	ON_WM_MOUSEWHEEL()
 END_MESSAGE_MAP()
 
 BOOL CDtSpecDlg::OnEraseBkgnd(CDC* pDC)
@@ -376,8 +381,6 @@ void CDtSpecDlg::HideAllSpecPageControls()
 
 BOOL CDtSpecDlg::PreTranslateMessage(MSG* pMsg)
 {
-	if (pMsg->message == WM_MOUSEWHEEL)
-		return TRUE;
 	return CDialogEx::PreTranslateMessage(pMsg);
 }
 
@@ -792,6 +795,155 @@ void CDtSpecDlg::ClampSpecDialogToWorkArea(const CRect& workArea)
 		SetWindowPos(NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
 
+int CDtSpecDlg::SpecChromeHeightPx(double scale) const
+{
+	const int margin = (int)(16 * scale);
+	const int tabH = (int)(32 * scale);
+	CDtSpecDlg* pDlg = const_cast<CDtSpecDlg*>(this);
+	const int btnH = SpecButtonHeight(pDlg, pDlg->m_fontBody, scale);
+	const int btnBand = btnH + (int)(28 * scale);
+	return margin + tabH + margin + btnBand + (int)(12 * scale);
+}
+
+void CDtSpecDlg::ApplySpecScroll(int newPos)
+{
+	if (!(GetStyle() & WS_VSCROLL))
+		return;
+
+	const int maxPos = max(0, m_specContentH - m_specVisibleContentH);
+	if (newPos < 0)
+		newPos = 0;
+	if (newPos > maxPos)
+		newPos = maxPos;
+	if (newPos == m_specScrollPos)
+		return;
+
+	m_specScrollPos = newPos;
+	SetScrollPos(SB_VERT, m_specScrollPos, TRUE);
+	RelayoutSpecPage();
+}
+
+void CDtSpecDlg::ClipActiveSpecPageControls(int visTop, int visBottom)
+{
+	if (!(GetStyle() & WS_VSCROLL))
+		return;
+
+	auto clipList = [&](CWnd* wnds[], int count) {
+		for (int i = 0; i < count; i++)
+		{
+			CWnd* p = wnds[i];
+			if (p == NULL || !::IsWindow(p->m_hWnd) || !p->IsWindowVisible())
+				continue;
+			CRect rc;
+			p->GetWindowRect(&rc);
+			ScreenToClient(&rc);
+			if (rc.bottom <= visTop + 1 || rc.top >= visBottom - 1)
+			{
+				p->ShowWindow(SW_HIDE);
+				p->EnableWindow(FALSE);
+			}
+		}
+	};
+
+	if (m_specActivePage == 0)
+	{
+		CWnd* wnds[] = {
+			&m_stTitle, &m_stPath, &m_grpTiming, &m_lblDelay, &m_edDelay,
+			&m_grpLimits, &m_lblDef1, &m_lblDef2, &m_lblDef3, &m_lblDef4,
+			&m_lblDef5, &m_lblDef6, &m_edDefMinSsr, &m_edDefMaxSsr,
+			&m_edDefMinCur, &m_edDefMaxCur, &m_edDefMinTemp, &m_edDefMaxTemp,
+			&m_grpTempI2c, &m_chkTempEn, &m_lblTempAddr, &m_lblTempMode,
+			&m_lblTempRegLo, &m_lblTempRegHi, &m_lblTempCoeffLo, &m_lblTempCoeffHi,
+			&m_lblTempDiv, &m_lblTempOffset, &m_edTempAddr, &m_edTempMode,
+			&m_edTempRegLo, &m_edTempRegHi, &m_edTempCoeffLo, &m_edTempCoeffHi,
+			&m_edTempDiv, &m_edTempOffset, &m_stFormula, &m_stHint,
+		};
+		clipList(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+	}
+	else if (m_specActivePage == 1)
+	{
+		CWnd* wnds[] = {
+			&m_grpBadPixel, &m_chkBpEn, &m_lblBpAlgo, &m_radBpNeighbor, &m_radBpHuawei,
+			&m_grpBpHuawei, &m_grpBpNeighbor, &m_lblBpClusterTh, &m_edBpClusterTh,
+			&m_lblBpClusterMin, &m_edBpClusterMin, &m_lblBpSinglePpm, &m_edBpSinglePpm,
+			&m_chkBpGrGbToG, &m_lblBpMax, &m_lblBpHotDelta, &m_edBpMax, &m_edBpHotDelta,
+			&m_lblBpHotAbs, &m_edBpHotAbs, &m_lblBpBorder, &m_edBpBorder,
+			&m_chkBpSave, &m_grpBpSnapFiles, &m_chkBpSaveBmp, &m_chkBpSavePacked,
+			&m_chkBpSaveU12, &m_chkBpSaveU10, &m_lblBpDir, &m_edBpDir, &m_btnBpBrowse,
+			&m_stBpHint,
+		};
+		clipList(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+	}
+	else
+	{
+		CWnd* wnds[] = {
+			&m_grpFirmware, &m_chkFwEn, &m_lblFwFov, &m_lblFwWarmup, &m_edFwWarmup,
+			&m_lblFwPath, &m_stFwPath, &m_lblFwGrabIni, &m_edFwGrabIni, &m_btnFwGrabBrowse,
+			&m_stFwHint, &m_cmbFwFov,
+		};
+		clipList(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+	}
+}
+
+void CDtSpecDlg::OnVScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
+{
+	if (!(GetStyle() & WS_VSCROLL))
+	{
+		CDialogEx::OnVScroll(nSBCode, nPos, pScrollBar);
+		return;
+	}
+
+	SCROLLINFO si = {};
+	si.cbSize = sizeof(si);
+	si.fMask = SIF_ALL;
+	GetScrollInfo(SB_VERT, &si, TRUE);
+
+	int pos = m_specScrollPos;
+	const int line = max((int)(24 * m_specLayoutScale), 8);
+	switch (nSBCode)
+	{
+	case SB_LINEUP:
+		pos -= line;
+		break;
+	case SB_LINEDOWN:
+		pos += line;
+		break;
+	case SB_PAGEUP:
+		pos -= (int)si.nPage;
+		break;
+	case SB_PAGEDOWN:
+		pos += (int)si.nPage;
+		break;
+	case SB_TOP:
+		pos = 0;
+		break;
+	case SB_BOTTOM:
+		pos = max(0, (int)(si.nMax - (int)si.nPage));
+		break;
+	case SB_THUMBTRACK:
+	case SB_THUMBPOSITION:
+		pos = (int)nPos;
+		break;
+	default:
+		CDialogEx::OnVScroll(nSBCode, nPos, pScrollBar);
+		return;
+	}
+
+	ApplySpecScroll(pos);
+	CDialogEx::OnVScroll(nSBCode, nPos, pScrollBar);
+}
+
+BOOL CDtSpecDlg::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt)
+{
+	if (GetStyle() & WS_VSCROLL)
+	{
+		const int step = max((int)(48 * m_specLayoutScale), 16);
+		ApplySpecScroll(m_specScrollPos - (zDelta / WHEEL_DELTA) * step);
+		return TRUE;
+	}
+	return CDialogEx::OnMouseWheel(nFlags, zDelta, pt);
+}
+
 int CDtSpecDlg::MaxClientHeightForWorkArea(int clientW, const CRect& workArea, double scale) const
 {
 	const int maxOuterH = workArea.Height() - (int)(16 * scale);
@@ -892,35 +1044,58 @@ int CDtSpecDlg::MeasureMaxPageHeight(const CRect& viewport, double scale)
 
 void CDtSpecDlg::InitSpecDialogFrame(bool force)
 {
-	const double scale = GetSpecUiScale();
-	if (!force && m_specFrameReady && fabs(scale - m_specLayoutScale) < 0.01)
+	const double dpiScale = GetSpecUiScale();
+	if (!force && m_specFrameReady && fabs(dpiScale - m_specLayoutScale) < 0.01)
 		return;
-
-	m_specLayoutScale = scale;
-	m_specMargin = (int)(16 * scale);
-	m_specTabH = (int)(32 * scale);
-	m_specBtnH = SpecButtonHeight(this, m_fontBody, scale);
-	m_specBtnW = (int)(100 * scale);
-	m_specBtnBandH = m_specBtnH + (int)(28 * scale);
 
 	CRect wr;
 	SystemParametersInfo(SPI_GETWORKAREA, 0, &wr, 0);
 
-	const int wantW = min((int)(720 * scale), wr.Width() - (int)(32 * scale));
-	const int contentWidth = max(wantW - m_specMargin * 2, (int)(500 * scale));
+	double fitScale = dpiScale;
+	int contentH = 0;
+	int wantW = 0;
+
+	for (double s = dpiScale; s >= 0.82; s -= 0.025)
+	{
+		const int margin = (int)(16 * s);
+		wantW = min((int)(720 * s), wr.Width() - (int)(32 * s));
+		const int contentWidth = max(wantW - margin * 2, (int)(480 * s));
+		const CRect measureArea(0, 0, contentWidth, 20000);
+
+		HideAllSpecPageControls();
+		contentH = MeasureMaxPageHeight(measureArea, s);
+		HideAllSpecPageControls();
+
+		const int chromeH = SpecChromeHeightPx(s);
+		const int maxClientH = MaxClientHeightForWorkArea(wantW, wr, s);
+		fitScale = s;
+		if (contentH + chromeH <= maxClientH)
+			break;
+	}
+
+	m_specLayoutScale = fitScale;
+	m_specMargin = (int)(16 * fitScale);
+	m_specTabH = (int)(32 * fitScale);
+	m_specBtnH = SpecButtonHeight(this, m_fontBody, fitScale);
+	m_specBtnW = (int)(100 * fitScale);
+	m_specBtnBandH = m_specBtnH + (int)(28 * fitScale);
+
+	wantW = min((int)(720 * fitScale), wr.Width() - (int)(32 * fitScale));
+	const int contentWidth = max(wantW - m_specMargin * 2, (int)(480 * fitScale));
 	const CRect measureArea(0, 0, contentWidth, 20000);
 
 	HideAllSpecPageControls();
-	const int contentH = MeasureMaxPageHeight(measureArea, scale);
+	contentH = MeasureMaxPageHeight(measureArea, fitScale);
 	HideAllSpecPageControls();
+	m_specContentH = contentH;
 
-	const int chromeH = m_specMargin + m_specTabH + m_specMargin + m_specBtnBandH;
-	int wantClientH = contentH + chromeH + (int)(12 * scale);
-	const int minClientH = m_specBtnBandH + m_specTabH + m_specMargin * 3 + (int)(220 * scale);
+	const int chromeH = SpecChromeHeightPx(fitScale);
+	int wantClientH = contentH + chromeH;
+	const int minClientH = m_specBtnBandH + m_specTabH + m_specMargin * 3 + (int)(120 * fitScale);
 	if (wantClientH < minClientH)
 		wantClientH = minClientH;
 
-	const int maxClientH = MaxClientHeightForWorkArea(wantW, wr, scale);
+	const int maxClientH = MaxClientHeightForWorkArea(wantW, wr, fitScale);
 	if (wantClientH > maxClientH)
 		wantClientH = maxClientH;
 
@@ -937,14 +1112,32 @@ void CDtSpecDlg::InitSpecDialogFrame(bool force)
 	GetClientRect(&cr);
 	PlaceSpecTabAndButtons(cr);
 
-	const BOOL needScroll = (contentH + chromeH > wantClientH + (int)(4 * scale));
+	const int contentChrome = m_specMargin + m_specTabH + m_specMargin + m_specBtnBandH;
+	m_specVisibleContentH = max(0, cr.bottom - contentChrome);
+	if (m_specVisibleContentH < (int)(100 * fitScale))
+		m_specVisibleContentH = (int)(100 * fitScale);
+
+	const BOOL needScroll = (contentH > m_specVisibleContentH + (int)(4 * fitScale));
 	if (needScroll)
 	{
 		ModifyStyle(0, WS_VSCROLL);
+		const int maxPos = max(0, contentH - m_specVisibleContentH);
+		if (m_specScrollPos > maxPos)
+			m_specScrollPos = maxPos;
+
+		SCROLLINFO si = {};
+		si.cbSize = sizeof(si);
+		si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+		si.nMin = 0;
+		si.nMax = contentH;
+		si.nPage = (UINT)m_specVisibleContentH;
+		si.nPos = m_specScrollPos;
+		SetScrollInfo(SB_VERT, &si, TRUE);
 		ShowScrollBar(SB_VERT, TRUE);
 	}
 	else
 	{
+		m_specScrollPos = 0;
 		ModifyStyle(WS_VSCROLL, 0);
 		ShowScrollBar(SB_VERT, FALSE);
 	}
@@ -965,19 +1158,24 @@ void CDtSpecDlg::RelayoutSpecPage()
 
 	const int contentTop = m_specMargin + m_specTabH + m_specMargin;
 	const int contentBottom = cr.bottom - m_specBtnBandH;
-	const CRect contentArea(m_specMargin, contentTop, cr.right - m_specMargin,
-		max(contentBottom, contentTop + (int)(160 * scale)));
+	const int visH = max(contentBottom - contentTop, (int)(80 * scale));
+	const int layoutH = max(m_specContentH, visH);
+	const CRect layoutVp(
+		m_specMargin,
+		contentTop - m_specScrollPos,
+		cr.right - m_specMargin,
+		contentTop - m_specScrollPos + layoutH);
 
 	HideAllSpecPageControls();
 	if (page == 0)
 	{
 		UpdateFormulaText();
-		LayoutGatePage(contentArea, scale, true);
+		LayoutGatePage(layoutVp, scale, true);
 	}
 	else if (page == 1)
-		LayoutBadPixelPage(contentArea, scale, true);
+		LayoutBadPixelPage(layoutVp, scale, true);
 	else
-		LayoutFirmwarePage(contentArea, scale, true);
+		LayoutFirmwarePage(layoutVp, scale, true);
 
 	if (page != 0)
 		HideGatePageControls();
@@ -986,6 +1184,7 @@ void CDtSpecDlg::RelayoutSpecPage()
 	if (page != 2)
 		HideFirmwarePageControls();
 
+	ClipActiveSpecPageControls(contentTop, contentBottom);
 	AdjustSpecPageZOrder();
 }
 
@@ -1134,6 +1333,10 @@ void CDtSpecDlg::ShowSpecPage(int page)
 	if (m_pFn != NULL)
 		m_firmware = m_pFn->m_gateFirmwareBurn;
 
+	m_specScrollPos = 0;
+	if (GetStyle() & WS_VSCROLL)
+		SetScrollPos(SB_VERT, 0, TRUE);
+
 	RelayoutSpecPage();
 
 	if (page == 2 && m_pFn != NULL)
@@ -1152,6 +1355,7 @@ LRESULT CDtSpecDlg::OnDpiChanged(WPARAM /*wParam*/, LPARAM /*lParam*/)
 		m_fontSmall.DeleteObject();
 	}
 	m_specFrameReady = false;
+	m_specScrollPos = 0;
 	ApplyDialogFonts();
 	EnsureStandardCheckAndRadioButtons();
 	InitSpecDialogFrame(true);

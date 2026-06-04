@@ -4,6 +4,8 @@
 [timing]
 ; LightTest 开流后等待多久再采样(毫秒)，建议>=2000，等图像/电流稳定
 DelayMs={{DELAY_MS}}
+; Enabled=0 且读 SensorID/校验后，光测采帧率前等待(毫秒)；烧录=1 时不使用；0=不等待
+PostI2cDelayMs={{POST_I2C_DELAY_MS}}
 
 [limits]
 ; 各 Dev/VC 默认共用：Sensor 帧率、电流(mA)、芯片温度(C) 合格范围
@@ -108,7 +110,7 @@ Enabled={{FW_EN}}
 VerifyEnabled={{FW_VERIFY_EN}}
 ; VerifyBeforeGrab：=0 抓图 InitGrab 后读寄存器（推荐）；=1 仅 InitPower 读（易找不到从机）
 VerifyBeforeGrab={{FW_VERIFY_BEFORE_GRAB}}
-; ReadSensorIdEnabled：烧录前是否读 SensorID（0x7E80×10）。=0 跳过
+; ReadSensorIdEnabled：读 SensorID（0x7E80×10）。Enabled=0 为出流+DelayMs 后读；Enabled=1 为烧录前读
 ;                    Fa132DualChip=1 时先 Chip0 并行读再 Chip1 并行读（与烧录/校验一致）
 ReadSensorIdEnabled={{FW_READ_SENSOR_ID}}
 ; ---------- 固件文件 ----------
@@ -137,6 +139,7 @@ Fa132DualChip={{FW_FA132_DUAL_CHIP}}
 DualChipVcSplit={{FW_DUAL_CHIP_VC_SPLIT}}
 ; ---------- 烧录后流程 ----------
 ; GrabIniAfterPowerCycle：断电上电后校验/光测用的 GrabTab ini（主界面 Load 仍为烧录前点亮）
+; 含中文路径请用 Spec-Firmware 浏览保存（程序会按 GBK 正确写入本行）
 GrabIniAfterPowerCycle={{FW_GRAB_INI_AFTER_PC}}
 ; PowerCycleAfter：=1 且 Enabled=1 烧录后断电上电再校验；仅校验时不断电
 PowerCycleAfter={{FW_POWER_CYCLE}}

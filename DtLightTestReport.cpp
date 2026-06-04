@@ -174,7 +174,13 @@ bool WriteProductionReportCsv(
 			CStringA line;
 			bool first = true;
 			if (!r.sensorIdHex.IsEmpty())
-				AppendCsvField(line, CStringA(r.sensorIdHex), &first);
+			{
+				/* Leading ' forces Excel to treat SensorID as text (avoids scientific notation). */
+				CStringA idA;
+				idA += '\'';
+				idA += CStringA(r.sensorIdHex);
+				AppendCsvField(line, idA, &first);
+			}
 			else
 				AppendCsvField(line, "", &first);
 			AppendCsvField(line, timeA, &first);

@@ -6,6 +6,8 @@
 CStringA Utf8ToAcp(const char* utf8, int byteLen = -1);
 /** System ANSI (GBK) -> UTF-8 for daily log files (editors expect UTF-8). */
 CStringA AcpToUtf8(const char* acp, int byteLen = -1);
+/** UI/exe path (Unicode TCHAR) -> UTF-8 for embedding in GateSpec UTF-8 template. */
+CStringA WideToUtf8A(LPCTSTR widePath);
 CString Utf8ToCString(const char* utf8, int byteLen = -1);
 /** UTF-8 -> UI string; expands literal \\r\\n in DtZh literals to line breaks. */
 CString Utf8ToUiText(const char* utf8, int byteLen = -1);

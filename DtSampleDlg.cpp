@@ -41,6 +41,25 @@ static void ApplyMfcToolbarLook(CMFCButton& b, COLORREF face, COLORREF text, COL
 	b.SetTextHotColor(textHot);
 }
 
+/* Preview cell colors (Plan A): Off / Wait / Burning / Burn OK â€?distinct from legacy Idle gray. */
+namespace PreviewCellUi {
+	const COLORREF kOffBg = RGB(229, 231, 235);
+	const COLORREF kOffFg = RGB(55, 65, 81);
+	const COLORREF kWaitBg = RGB(241, 245, 249);
+	const COLORREF kWaitFg = RGB(100, 116, 139);
+	const COLORREF kWaitBorder = RGB(148, 163, 184);
+	const COLORREF kBurnBg = RGB(30, 41, 59);
+	const COLORREF kBurnFg = RGB(248, 250, 252);
+	const COLORREF kBurnBarFill = RGB(245, 158, 11);
+	const COLORREF kBurnBarTrack = RGB(51, 65, 85);
+	const COLORREF kBurnOkBg = RGB(20, 83, 45);
+	const COLORREF kBurnOkFg = RGB(255, 255, 255);
+	const COLORREF kBurnNgBg = RGB(127, 29, 29);
+	const COLORREF kBurnNgFg = RGB(255, 255, 255);
+	const COLORREF kBurnNgBarFill = RGB(248, 113, 113);
+	const COLORREF kBurnNgBarTrack = RGB(69, 10, 10);
+}
+
 static void SetTriVertex(TRIVERTEX& v, int x, int y, COLORREF c)
 {
 	v.x = x;
@@ -198,6 +217,7 @@ CDtSampleDlg::CDtSampleDlg(CWnd* pParent /*=NULL*/)
 	, m_fwBurnHandledGen((DWORD)-1)
 	, m_bFwPowerCyclePending(FALSE)
 	, m_bPreviewFrozen(FALSE)
+	, m_bLightTestAfterI2cSettle(FALSE)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
@@ -566,13 +586,13 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 	if (!m_bStart)
 	{
 		m_bPreviewFrozen = FALSE;
+		m_bLightTestAfterI2cSettle = FALSE;
 		SetWindowText(_T("QT_FA132_Software"));
 		m_dtFunction.ClearLightGateResults();
 		m_dtFunction.ReadDtCarIni();
 		m_dtFunction.ReadGateSpecIni();
 		ReSize();
 		const bool fwBurn = m_dtFunction.m_gateFirmwareBurn.enabled;
-		const bool fwVerify = m_dtFunction.m_gateFirmwareBurn.verifyEnabled;
 		KillTimer(TIMER_ID_FW_BURN);
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
 		KillTimer(TIMER_ID_FW_POWER_OFF);
@@ -586,15 +606,6 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 			m_dtFunction.LogProductionRunStart();
 			SetTimer(0, 1000, NULL);
 		}
-		else if (fwVerify)
-		{
-			if (!m_dtFunction.Start())
-				return;
-			m_bStart = TRUE;
-			m_dtFunction.LogProductionRunStart();
-			SetTimer(0, 1000, NULL);
-			ScheduleFirmwareVerifyThenLightTest();
-		}
 		else if (!m_dtFunction.Start())
 		{
 			return;
@@ -604,7 +615,7 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 			m_bStart = TRUE;
 			m_dtFunction.LogProductionRunStart();
 			SetTimer(0, 1000, NULL);
-			SetTimer(TIMER_ID_STREAM_GATE, m_dtFunction.m_specDelayMs, NULL);
+			ScheduleFirmwareVerifyThenLightTest();
 		}
 	}
 	else {
@@ -755,6 +766,18 @@ unsigned __stdcall CDtSampleDlg::FirmwareBurnWorkerProc(void* param)
 	return ok ? 0u : 1u;
 }
 
+void CDtSampleDlg::RunSensorIdAfterStreamIfNeeded()
+{
+	const GateFirmwareBurnCfg& fw = m_dtFunction.m_gateFirmwareBurn;
+	if (fw.enabled)
+		return;
+	if (!fw.readSensorIdEnabled && !m_dtFunction.m_gateSensorTempI2c.enabled)
+		return;
+	if (fw.readSensorIdEnabled)
+		msgUtf8(DtZh::kFwSensorIdAfterStream);
+	(void)m_dtFunction.RunSensorIdReadParallel();
+}
+
 void CDtSampleDlg::WaitForFwPrepThread(DWORD timeoutMs)
 {
 	if (m_hFwPrepThread == NULL)
@@ -881,6 +904,7 @@ void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 	WaitForFwBurnThread(0);
 	if (m_bStart)
 	{
+		m_bLightTestAfterI2cSettle = FALSE;
 		m_dtFunction.Stop();
 		m_bStart = FALSE;
 	}
@@ -907,13 +931,6 @@ void CDtSampleDlg::ScheduleFirmwareVerifyThenLightTest()
 		int delay = fw.enabled ? fw.postBurnDelayMs : m_dtFunction.m_specDelayMs;
 		if (fw.enabled && delay < 200)
 			delay = 1000;
-		if (!fw.enabled)
-		{
-			if (!m_dtFunction.Start())
-				return;
-			m_bStart = TRUE;
-			SetTimer(0, 1000, NULL);
-		}
 		SetTimer(TIMER_ID_STREAM_GATE, delay, NULL);
 		return;
 	}
@@ -957,17 +974,17 @@ bool CDtSampleDlg::RunFirmwareBurnVerifyOrStop()
 		}
 		else
 		{
-			msgUtf8(DtZh::kFwVerifyStart);
+			msgUtf8(fw.enabled ? DtZh::kFwVerifyStart : DtZh::kFwVerifyStartStream);
 			(void)m_dtFunction.RunFirmwareBurnVerifyAll();
 			if (usePrep && captureWasUp)
 				m_dtFunction.RestoreWorkCaptureAfterVerify();
 		}
 	}
-	else
-	{
-		msgUtf8(DtZh::kFwVerifyStart);
-		(void)m_dtFunction.RunFirmwareBurnVerifyAll();
-	}
+		else
+		{
+			msgUtf8(fw.enabled ? DtZh::kFwVerifyStart : DtZh::kFwVerifyStartStream);
+			(void)m_dtFunction.RunFirmwareBurnVerifyAll();
+		}
 
 	return true;
 }
@@ -1019,6 +1036,7 @@ LRESULT CDtSampleDlg::OnFwBurnDone(WPARAM wParam, LPARAM lParam)
 	if (!m_bStart && !m_bFwPowerCyclePending)
 		return 0;
 
+	PaintPreviewCellsBurnSticky();
 	ClearFwBurnCellOverlay(false);
 	ContinueAfterFirmwareBurn();
 	return 0;
@@ -1062,34 +1080,37 @@ bool CDtSampleDlg::AnyFirmwareBurnChannelFailed() const
 	return false;
 }
 
-void CDtSampleDlg::PaintPreviewCellsBurnResult()
+bool CDtSampleDlg::IsPreviewChannelOn(int dev, int vc) const
 {
-	const COLORREF idleBg = RGB(55, 65, 81);
-	const COLORREF idleFg = RGB(203, 213, 225);
+	return dev < m_dtFunction.m_iEnumDevNum && vc < m_dtFunction.m_iVcNum
+		&& m_dtFunction.IsDevEnabled(dev) && m_dtFunction.IsVcEnabled(dev, vc);
+}
+
+void CDtSampleDlg::PaintPreviewCellsBurnSticky()
+{
 	for (int d = 0; d < 8; d++)
 	{
 		for (int v = 0; v < 4; v++)
 		{
-			const bool channelOn = (d < m_dtFunction.m_iEnumDevNum && v < m_dtFunction.m_iVcNum
-				&& m_dtFunction.IsDevEnabled(d) && m_dtFunction.IsVcEnabled(d, v));
-			if (!channelOn)
+			if (!IsPreviewChannelOn(d, v))
 			{
-				CString tip;
-				tip.Format(_T("D%d V%d\nIdle"), d, v);
-				PaintPreviewCellState(d, v, tip, idleBg, idleFg);
+				PaintPreviewCellOff(d, v);
 				continue;
 			}
 			if (m_dtFunction.m_bFirmwareBurnPass[d][v])
+				PaintPreviewCellBurnOk(d, v);
+			else
 			{
-				CString tip;
-				tip.Format(_T("D%d V%d\nIdle"), d, v);
-				PaintPreviewCellState(d, v, tip, idleBg, idleFg);
-				continue;
+				m_dtFunction.SetFirmwareBurnPercent(d, v, 100);
+				PaintPreviewCellFirmware(d, v);
 			}
-			m_dtFunction.SetFirmwareBurnPercent(d, v, 100);
-			PaintPreviewCellFirmware(d, v);
 		}
 	}
+}
+
+void CDtSampleDlg::PaintPreviewCellsBurnResult()
+{
+	PaintPreviewCellsBurnSticky();
 	m_dtFunction.ClearFirmwareBurnUiState();
 }
 
@@ -1110,7 +1131,7 @@ void CDtSampleDlg::InvalidateEnabledPreviewCells()
 	}
 }
 
-void CDtSampleDlg::PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF bg, COLORREF fg)
+void CDtSampleDlg::PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF bg, COLORREF fg, bool dashedBorder)
 {
 	if (dev < 0 || dev >= MAX_CC16 * MAX_DEV || vc < 0 || vc >= MAX_VC)
 		return;
@@ -1125,6 +1146,16 @@ void CDtSampleDlg::PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF 
 		return;
 
 	dc.FillSolidRect(&rFull, bg);
+	if (dashedBorder)
+	{
+		CPen pen(PS_DOT, 1, PreviewCellUi::kWaitBorder);
+		CPen* pOldPen = dc.SelectObject(&pen);
+		CBrush* pNullBrush = CBrush::FromHandle((HBRUSH)GetStockObject(NULL_BRUSH));
+		CBrush* pOldBrush = dc.SelectObject(pNullBrush);
+		dc.Rectangle(&rFull);
+		dc.SelectObject(pOldPen);
+		dc.SelectObject(pOldBrush);
+	}
 
 	CFont font;
 	const int pt = (rFull.Width() < 80) ? 9 : 11;
@@ -1151,39 +1182,55 @@ void CDtSampleDlg::PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF 
 	pWnd->UpdateWindow();
 }
 
+void CDtSampleDlg::PaintPreviewCellOff(int dev, int vc)
+{
+	CString tip;
+	tip.Format(_T("D%d V%d\nOff"), dev, vc);
+	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kOffBg, PreviewCellUi::kOffFg);
+}
+
+void CDtSampleDlg::PaintPreviewCellWait(int dev, int vc)
+{
+	CString tip;
+	tip.Format(_T("D%d V%d\nWait"), dev, vc);
+	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kWaitBg, PreviewCellUi::kWaitFg, true);
+}
+
+void CDtSampleDlg::PaintPreviewCellBurnOk(int dev, int vc)
+{
+	CString tip;
+	tip.Format(_T("D%d V%d\nBurn OK"), dev, vc);
+	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kBurnOkBg, PreviewCellUi::kBurnOkFg);
+}
+
 void CDtSampleDlg::PaintPreviewCellsIdle()
 {
-	const COLORREF bg = RGB(55, 65, 81);
-	const COLORREF fg = RGB(203, 213, 225);
 	for (int d = 0; d < 8; d++)
 	{
 		for (int v = 0; v < 4; v++)
 		{
-			CString tip;
-			tip.Format(_T("D%d V%d\nIdle"), d, v);
-			PaintPreviewCellState(d, v, tip, bg, fg);
+			if (!IsPreviewChannelOn(d, v))
+				PaintPreviewCellOff(d, v);
 		}
 	}
 }
 
 void CDtSampleDlg::PaintPreviewCellsTestResult()
 {
-	const COLORREF idleBg = RGB(55, 65, 81);
-	const COLORREF idleFg = RGB(203, 213, 225);
 	for (int d = 0; d < 8; d++)
 	{
 		for (int v = 0; v < 4; v++)
 		{
-			const bool channelOn = (d < m_dtFunction.m_iEnumDevNum && v < m_dtFunction.m_iVcNum
-				&& m_dtFunction.IsDevEnabled(d) && m_dtFunction.IsVcEnabled(d, v));
-
-			COLORREF bg = idleBg;
-			COLORREF fg = idleFg;
-			CString tip;
-			if (!channelOn)
-				tip.Format(_T("D%d V%d\nIdle"), d, v);
-			else if (m_dtFunction.m_bLightGateHasResult)
+			if (!IsPreviewChannelOn(d, v))
 			{
+				PaintPreviewCellOff(d, v);
+				continue;
+			}
+			if (m_dtFunction.m_bLightGateHasResult)
+			{
+				COLORREF bg;
+				COLORREF fg;
+				CString tip;
 				if (m_dtFunction.m_bLightGatePass[d][v])
 				{
 					bg = RGB(22, 163, 74);
@@ -1196,11 +1243,17 @@ void CDtSampleDlg::PaintPreviewCellsTestResult()
 					fg = RGB(255, 255, 255);
 					tip.Format(_T("D%d V%d\nNG"), d, v);
 				}
+				PaintPreviewCellState(d, v, tip, bg, fg);
+			}
+			else if (m_dtFunction.m_bFirmwareBurnHasResult && m_dtFunction.m_bFirmwareBurnPass[d][v])
+				PaintPreviewCellBurnOk(d, v);
+			else if (m_dtFunction.m_bFirmwareBurnHasResult)
+			{
+				m_dtFunction.SetFirmwareBurnPercent(d, v, 100);
+				PaintPreviewCellFirmware(d, v);
 			}
 			else
-				tip.Format(_T("D%d V%d\nIdle"), d, v);
-
-			PaintPreviewCellState(d, v, tip, bg, fg);
+				PaintPreviewCellOff(d, v);
 		}
 	}
 }
@@ -1208,6 +1261,14 @@ void CDtSampleDlg::PaintPreviewCellsTestResult()
 void CDtSampleDlg::ResetFwBurnCellOverlay()
 {
 	m_dtFunction.ResetFirmwareBurnUiForEnabledChannels();
+	for (int d = 0; d < 8; d++)
+	{
+		for (int v = 0; v < 4; v++)
+		{
+			if (!IsPreviewChannelOn(d, v))
+				PaintPreviewCellOff(d, v);
+		}
+	}
 	for (int d = 0; d < m_dtFunction.m_iEnumDevNum; d++)
 	{
 		if (!m_dtFunction.IsDevEnabled(d))
@@ -1243,24 +1304,39 @@ void CDtSampleDlg::PaintPreviewCellFirmware(int dev, int vc)
 	const bool burnFail = (pct >= 100 && m_dtFunction.m_bFirmwareBurnHasResult
 		&& !m_dtFunction.m_bFirmwareBurnInProgress
 		&& !m_dtFunction.m_bFirmwareBurnPass[dev][vc]);
+	const bool burnOk = (pct >= 100 && m_dtFunction.m_bFirmwareBurnHasResult
+		&& !m_dtFunction.m_bFirmwareBurnInProgress
+		&& m_dtFunction.m_bFirmwareBurnPass[dev][vc]);
 
-	COLORREF bg = RGB(30, 41, 59);
-	COLORREF fg = RGB(226, 232, 240);
-	COLORREF barFill = RGB(34, 211, 238);
-	COLORREF barTrack = RGB(51, 65, 85);
+	if (burnOk)
+	{
+		PaintPreviewCellBurnOk(dev, vc);
+		return;
+	}
+
+	if (pct <= 0 && m_dtFunction.IsFirmwareBurnOverlayActive())
+	{
+		PaintPreviewCellWait(dev, vc);
+		return;
+	}
+
+	COLORREF bg = PreviewCellUi::kBurnBg;
+	COLORREF fg = PreviewCellUi::kBurnFg;
+	COLORREF barFill = PreviewCellUi::kBurnBarFill;
+	COLORREF barTrack = PreviewCellUi::kBurnBarTrack;
 	if (burnFail)
 	{
-		bg = RGB(127, 29, 29);
-		fg = RGB(255, 255, 255);
-		barFill = RGB(248, 113, 113);
-		barTrack = RGB(69, 10, 10);
+		bg = PreviewCellUi::kBurnNgBg;
+		fg = PreviewCellUi::kBurnNgFg;
+		barFill = PreviewCellUi::kBurnNgBarFill;
+		barTrack = PreviewCellUi::kBurnNgBarTrack;
 	}
 
 	/* Full fill clears carDrawImage / burn text residue. */
 	dc.FillSolidRect(&rFull, bg);
 	dc.FillSolidRect(&rFull, bg);
 
-	const int barH = max(4, rFull.Height() / 10);
+	const int barH = max(4, rFull.Height() * 15 / 100);
 	CRect rcBar(rFull.left, rFull.bottom - barH, rFull.right, rFull.bottom);
 	dc.FillSolidRect(&rcBar, barTrack);
 	if (pct > 0)
@@ -1349,6 +1425,7 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
 		if (!m_bStart && !m_dtFunction.m_gateFirmwareBurn.verifyEnabled)
 			return;
+		RunSensorIdAfterStreamIfNeeded();
 		if (!RunFirmwareBurnVerifyOrStop())
 			return;
 		if (m_dtFunction.m_bRunning == FALSE)
@@ -1367,14 +1444,38 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 				GetDlgItem(IDC_BUTTON_START)->SetWindowText(_T("Stop"));
 			UpdatePrimaryButtonLooks();
 		}
-		/* DelayMs already waited before verify; go to light test immediately. */
-		SetTimer(TIMER_ID_STREAM_GATE, 0, NULL);
+		{
+			const GateFirmwareBurnCfg& fwLt = m_dtFunction.m_gateFirmwareBurn;
+			const int postMs = m_dtFunction.LightTestSettleMsAfterI2c();
+			if (postMs > 0)
+			{
+				m_dtFunction.RestartGrabForLightTest();
+				msgUtf8(DtZh::kLogLtAfterI2cSettle, postMs);
+			}
+			SetTimer(TIMER_ID_STREAM_GATE, postMs, NULL);
+		}
 	}
 	else if (nIDEvent == TIMER_ID_STREAM_GATE)
 	{
 		KillTimer(TIMER_ID_STREAM_GATE);
 		if (!m_bStart)
 			return;
+		const GateFirmwareBurnCfg& fw = m_dtFunction.m_gateFirmwareBurn;
+		if (!m_bLightTestAfterI2cSettle)
+		{
+			if (!fw.verifyEnabled)
+				RunSensorIdAfterStreamIfNeeded();
+			const int postMs = fw.verifyEnabled ? 0 : m_dtFunction.LightTestSettleMsAfterI2c();
+			if (postMs > 0)
+			{
+				m_dtFunction.RestartGrabForLightTest();
+				msgUtf8(DtZh::kLogLtAfterI2cSettle, postMs);
+				m_bLightTestAfterI2cSettle = TRUE;
+				SetTimer(TIMER_ID_STREAM_GATE, postMs, NULL);
+				return;
+			}
+		}
+		m_bLightTestAfterI2cSettle = FALSE;
 		const bool ok = m_dtFunction.RunLightGatePerChannelReport();
 		if (ok)
 		{

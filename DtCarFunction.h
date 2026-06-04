@@ -64,6 +64,15 @@ struct GateSensorTempI2c
 	double offset;
 };
 
+/** Sensor temp via same lane/slave as SensorID (GateSpec [sensor_temp_i2c] formula). */
+bool Sony031ReadSensorTempC(
+	int devId,
+	int vcId,
+	const GateFirmwareBurnCfg& laneCfg,
+	unsigned char slaveHint,
+	const GateSensorTempI2c& tempCfg,
+	double* outTempC);
+
 class DtCarFunction : public CWnd
 {
 	DECLARE_DYNAMIC(DtCarFunction)
@@ -118,12 +127,16 @@ public:
 	bool    m_bPauseCaptureForBurn;	/* pause grab for firmware burn; keep power/grab init */
 	bool    m_workPowerReady[MAX_CC16 * MAX_DEV];
 	bool    m_workGrabReady[MAX_CC16 * MAX_DEV];
+	/** After ReloadGrabParaAfterPowerCycle: skip one main-INI reload in InitWorkCapture. */
+	bool    m_skipMainGrabReloadOnce[MAX_CC16 * MAX_DEV];
 	bool    m_previewDisplayInit[MAX_CC16 * MAX_DEV][MAX_VC];
 	CStringA m_workShowText[MAX_CC16 * MAX_DEV];	/* per-Dev overlay text for carDrawImage */
 
 	/* GateSpec.ini next to exe: timing + per-channel optional overrides */
 	CString m_strGateSpecIniPath;
 	int     m_specDelayMs;
+	/** [timing] PostI2cDelayMs: after SensorID/verify I2C, before light-test fps sample (Enabled=0 only). */
+	int     m_specPostI2cDelayMs;
 	GateChannelLimits m_gateDefault;
 	GateChannelLimits m_gatePerChannel[MAX_CC16 * MAX_DEV][MAX_VC];
 	/** [sensor_temp_i2c] formula; [sensor_temp_i2c_vc] D#_V# = per-lane sensor I2C slave (temp + burn). */
@@ -139,6 +152,8 @@ public:
 	int SaveDtCarIni();
 	/** Show channel enable dialog (call Enum first). */
 	void ShowChannelSelectDialog(CWnd* pParent);
+	/** Ms to wait after I2C (SensorID/verify) before light-test sample; 0 if burn or I2C steps off. */
+	int LightTestSettleMsAfterI2c() const;
 	/** Reload GateSpec.ini (timing + limits) from disk */
 	int ReadGateSpecIni();
 	/** Write current timing + limits + per-channel overrides to GateSpec.ini */
@@ -162,7 +177,9 @@ public:
 
 	/** UI-thread capture init (carInitPower + carInitGrab). */
 	bool InitWorkCapture(int devId);
-	void UninitWorkCapture(int devId);
+	void UninitWorkCapture(int devId, bool unitPower = true);
+	/** carGrabRestart on enabled Devs after I2C (SensorID/verify) before light test. */
+	void RestartGrabForLightTest();
 	/** After PowerCycleAfter: carLoadGrabPara(grabIniAfterPowerCycle) per enabled Dev (before Start). */
 	bool ReloadGrabParaAfterPowerCycle();
 	/** carDrawImage on UI thread (required for MFC CStatic preview). */
@@ -190,6 +207,8 @@ public:
 	    afterStart=false (UI): prep init only, no pause/join; power-cycle stays in DtSampleDlg.
 	    afterStart=true (legacy): capture threads running, PauseWorkThreads before burn. */
 	bool RunFirmwareBurnParallel(bool afterStart = false);
+	/** Parallel SensorID read (0x7E80×10) on enabled Dev/VC; independent of Enabled burn flag. */
+	bool RunSensorIdReadParallel();
 	/** Before 14-reg verify: drop GrabTab (UnitGrab), InitPower only (FA132 cal read). */
 	bool PrepareForFirmwareVerify();
 	/** After verify while capture was running: re-InitGrab and resume preview. */
@@ -212,6 +231,9 @@ public:
 	bool m_bSensorIdHasResult;
 	bool m_bSensorIdReadOk[MAX_CC16 * MAX_DEV][MAX_VC];
 	TCHAR m_sensorIdHex[MAX_CC16 * MAX_DEV][MAX_VC][21];
+	bool m_bSensorTempHasResult;
+	bool m_hasSensorTemp[MAX_CC16 * MAX_DEV][MAX_VC];
+	double m_sensorTempC[MAX_CC16 * MAX_DEV][MAX_VC];
 	bool AnySensorIdReadFailed() const;
 	bool PauseWorkThreadsForFirmwareBurn();
 
