@@ -188,10 +188,11 @@ static void GateIniFillBadPixelDark(LPCTSTR path, const GateBadPixelDarkCfg& fb,
 	}
 }
 
-static const unsigned char kGateDefaultTempI2cAddr[MAX_VC] = { 0x34, 0x84, 0x86, 0x88 };
+/** FA132 per-VC sensor I2C slave (Chip0: V0/V1, Chip1: V2/V3). */
+static const unsigned char kGateDefaultTempI2cAddr[MAX_VC] = { 0x64, 0x62, 0x68, 0x66 };
 
-/** GateSpec.ini: FA132 UI only Dev0..7 x VC0..3 (not 32 slots). */
-static const int kGateSpecIniDevSlots = MAX_DEV;
+/** GateSpec.ini: up to 4x FA132 = Dev0..31 x VC0..3 (128 channels). */
+static const int kGateSpecIniDevSlots = MAX_CC16 * MAX_DEV;
 
 static GateSensorTempI2c GateDefaultSensorTempI2c()
 {
@@ -217,7 +218,19 @@ static void GateIniFillTempI2cAddrGrid(LPCTSTR path, unsigned char addr[][MAX_VC
 		{
 			CString key;
 			key.Format(_T("D%d_V%d"), d, v);
-			addr[d][v] = (unsigned char)GateIniUint(path, sec, key, kGateDefaultTempI2cAddr[v]);
+			CString s = GetIniFileString(sec, key, _T(""), path);
+			s.Trim();
+			if (!s.IsEmpty())
+			{
+				addr[d][v] = (unsigned char)GateIniUint(path, sec, key, kGateDefaultTempI2cAddr[v]);
+			}
+			else if (d >= MAX_DEV)
+			{
+				/* D8..D31: same FA132 slot as D(dev%8) when key omitted. */
+				addr[d][v] = addr[d % MAX_DEV][v];
+			}
+			else
+				addr[d][v] = kGateDefaultTempI2cAddr[v];
 		}
 	}
 }
@@ -254,6 +267,8 @@ static void GateIniFillLimits(LPCTSTR path, LPCTSTR section, const GateChannelLi
 	out->minSensorTemp_C = GateIniDbl(path, section, _T("MinSensorTemp_C"), fb.minSensorTemp_C);
 	out->maxSensorTemp_C = GateIniDbl(path, section, _T("MaxSensorTemp_C"), fb.maxSensorTemp_C);
 }
+
+static bool GateLimEqual(const GateChannelLimits& a, const GateChannelLimits& b);
 
 namespace {
 
@@ -1645,6 +1660,8 @@ DtCarFunction::DtCarFunction()
 	memset(m_hWndVideo, 0, sizeof(m_hWndVideo));
 	memset(m_workPowerReady, 0, sizeof(m_workPowerReady));
 	memset(m_workGrabReady, 0, sizeof(m_workGrabReady));
+	memset(m_workGrabInitDone, 0, sizeof(m_workGrabInitDone));
+	memset(m_workGrabInitTick, 0, sizeof(m_workGrabInitTick));
 	memset(m_skipMainGrabReloadOnce, 0, sizeof(m_skipMainGrabReloadOnce));
 	memset(m_previewDisplayInit, 0, sizeof(m_previewDisplayInit));
 	for (int d = 0; d < MAX_CC16 * MAX_DEV; d++)
@@ -1660,6 +1677,7 @@ DtCarFunction::DtCarFunction()
 	m_specPostI2cDelayMs = 2000;
 	m_dwProductionRunStartTick = 0;
 	m_bProductionRunActive = FALSE;
+	memset(m_bFa132SlotOnline, 0, sizeof(m_bFa132SlotOnline));
 	m_bLightGateHasResult = false;
 	memset(m_bLightGatePass, 0, sizeof(m_bLightGatePass));
 	m_bFirmwareBurnHasResult = false;
@@ -1813,9 +1831,137 @@ bool DtCarFunction::EnsurePreviewDisplay(int dev, int vc)
 
 void DtCarFunction::InitAllPreviewDisplays()
 {
-	for (int d = 0; d < 8; d++)
-		for (int v = 0; v < 4; v++)
+	for (int d = 0; d < MAX_CC16 * MAX_DEV; d++)
+		for (int v = 0; v < MAX_VC; v++)
 			EnsurePreviewDisplay(d, v);
+}
+
+void DtCarFunction::InitPreviewDisplaysForDevRange(int baseDev, int devCount)
+{
+	if (baseDev < 0 || devCount <= 0)
+		return;
+	for (int ld = 0; ld < devCount && ld < MAX_DEV; ld++)
+	{
+		const int gd = baseDev + ld;
+		if (gd < 0 || gd >= MAX_CC16 * MAX_DEV)
+			break;
+		for (int v = 0; v < MAX_VC; v++)
+			EnsurePreviewDisplay(gd, v);
+	}
+}
+
+void DtCarFunction::RefreshFa132SlotsAfterEnum()
+{
+	for (int s = 0; s < MAX_CC16; s++)
+		m_bFa132SlotOnline[s] = (m_iEnumDevNum > s * MAX_DEV);
+}
+
+int DtCarFunction::CountFa132SlotsOnline() const
+{
+	int n = 0;
+	for (int s = 0; s < MAX_CC16; s++)
+	{
+		if (m_bFa132SlotOnline[s])
+			n++;
+	}
+	return n;
+}
+
+bool DtCarFunction::IsFa132SlotOnline(int slot) const
+{
+	if (slot < 0 || slot >= MAX_CC16)
+		return false;
+	return m_bFa132SlotOnline[slot] != FALSE;
+}
+
+bool DtCarFunction::IsDevEnumPresent(int dev) const
+{
+	return dev >= 0 && dev < m_iEnumDevNum;
+}
+
+int DtCarFunction::Fa132SlotForDev(int dev)
+{
+	if (dev < 0)
+		return -1;
+	return dev / MAX_DEV;
+}
+
+bool DtCarFunction::QueryFa132SlotTestResult(
+	int slot, Fa132SlotTestResult* outResult, int* outNgCount, int* outEnabledCount) const
+{
+	if (slot < 0 || slot >= MAX_CC16)
+		return false;
+
+	const bool hasAnyResult = m_bLightGateHasResult
+		|| m_bFirmwareBurnVerifyHasResult
+		|| m_bFirmwareBurnHasResult;
+	int ng = 0;
+	int enabled = 0;
+	int judged = 0;
+	const int baseDev = slot * MAX_DEV;
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = baseDev + ld;
+		if (!IsDevEnumPresent(d) || !IsDevEnabled(d))
+			continue;
+		for (int v = 0; v < m_iVcNum; v++)
+		{
+			if (!IsVcEnabled(d, v))
+				continue;
+			enabled++;
+			if (!hasAnyResult)
+				continue;
+			bool pass = false;
+			bool hasResult = false;
+			if (m_bLightGateHasResult)
+			{
+				hasResult = true;
+				pass = m_bLightGatePass[d][v];
+			}
+			else if (m_bFirmwareBurnVerifyHasResult)
+			{
+				hasResult = true;
+				pass = m_bFirmwareBurnVerifyPass[d][v];
+			}
+			else if (m_bFirmwareBurnHasResult)
+			{
+				hasResult = true;
+				pass = m_bFirmwareBurnPass[d][v];
+			}
+			if (!hasResult)
+				continue;
+			judged++;
+			if (!pass)
+				ng++;
+		}
+	}
+
+	if (outNgCount != NULL)
+		*outNgCount = ng;
+	if (outEnabledCount != NULL)
+		*outEnabledCount = enabled;
+	if (outResult != NULL)
+	{
+		if (!hasAnyResult || enabled == 0 || judged == 0)
+			*outResult = Fa132SlotResultNone;
+		else if (ng > 0)
+			*outResult = Fa132SlotResultNg;
+		else if (judged == enabled)
+			*outResult = Fa132SlotResultOk;
+		else
+			*outResult = Fa132SlotResultNone;
+	}
+	return true;
+}
+
+void DtCarFunction::ClampChannelEnableToEnum()
+{
+	for (int d = m_iEnumDevNum; d < MAX_CC16 * MAX_DEV; d++)
+	{
+		m_iDevEnable[d] = 0;
+		for (int v = 0; v < MAX_VC; v++)
+			m_iVcEnable[d][v] = 0;
+	}
 }
 
 void DtCarFunction::SetVideoCellLayout(int dev, int vc, HWND hwnd, unsigned short w, unsigned short h)
@@ -1847,6 +1993,8 @@ bool DtCarFunction::IsDevEnabled(int dev) const
 {
 	if (dev < 0 || dev >= MAX_CC16 * MAX_DEV)
 		return false;
+	if (!IsDevEnumPresent(dev))
+		return false;
 	return m_iDevEnable[dev] != 0;
 }
 
@@ -1869,6 +2017,12 @@ bool DtCarFunction::IsPreviewCellReady(int dev, int vc) const
 	if (m_vidWndW[dev][vc] < 2 || m_vidWndH[dev][vc] < 2)
 		return false;
 	return true;
+}
+
+void DtCarFunction::NotifyPreviewStreamRefresh() const
+{
+	if (m_hwndFirmwareBurnProgress != NULL && ::IsWindow(m_hwndFirmwareBurnProgress))
+		::PostMessage(m_hwndFirmwareBurnProgress, WM_PREVIEW_GRID_REPAINT, 0, 0);
 }
 
 bool DtCarFunction::HasAnyChannelEnabled() const
@@ -1908,11 +2062,9 @@ void DtCarFunction::ApplyChannelEnableDefaultsAfterEnum()
 	}
 }
 
-static int ChannelIniDevCount(const DtCarFunction* fn)
+static int ChannelIniDevCount(const DtCarFunction* /*fn*/)
 {
-	if (fn != NULL && fn->m_iEnumDevNum > 0 && fn->m_iEnumDevNum <= MAX_DEV)
-		return fn->m_iEnumDevNum;
-	return MAX_DEV;
+	return MAX_CC16 * MAX_DEV;
 }
 
 static int ChannelIniVcCount(const DtCarFunction* fn)
@@ -2068,6 +2220,16 @@ int DtCarFunction::ReadGateSpecIni()
 			CString sec;
 			sec.Format(_T("D%d_V%d"), d, v);
 			GateIniFillLimits(m_strGateSpecIniPath, sec, m_gateDefault, &m_gatePerChannel[d][v]);
+		}
+	}
+	/* D8..D31 without dedicated section: inherit D0..D7 template (dev % 8). */
+	for (int d = MAX_DEV; d < kGateSpecIniDevSlots; d++)
+	{
+		const int fb = d % MAX_DEV;
+		for (int v = 0; v < MAX_VC; v++)
+		{
+			if (GateLimEqual(m_gatePerChannel[d][v], m_gateDefault))
+				m_gatePerChannel[d][v] = m_gatePerChannel[fb][v];
 		}
 	}
 
@@ -2424,20 +2586,6 @@ int DtCarFunction::SaveGateSpecIni()
 			GateWriteHex(path, _T("sensor_temp_i2c_vc"), key, m_gateTempI2cAddr[d][v], 2);
 		}
 	}
-	/* Drop legacy D8..D31 keys from older GateSpec.ini */
-	for (int d = kGateSpecIniDevSlots; d < MAX_CC16 * MAX_DEV; d++)
-	{
-		for (int v = 0; v < MAX_VC; v++)
-		{
-			CString key;
-			key.Format(_T("D%d_V%d"), d, v);
-			WritePrivateProfileString(_T("sensor_temp_i2c_vc"), key, NULL, path);
-			CString sec;
-			sec.Format(_T("D%d_V%d"), d, v);
-			WritePrivateProfileString(sec, NULL, NULL, path);
-		}
-	}
-
 	for (int d = 0; d < kGateSpecIniDevSlots; d++)
 	{
 		for (int v = 0; v < MAX_VC; v++)
@@ -2577,6 +2725,8 @@ unsigned __stdcall DtCarFunction::FirmwareBurnThreadProc(void* p)
 	const bool ok = Sony031FlashProgram(dev, vc, tp->cfg, tp->slaveHint, &br);
 	fn->m_bFirmwareBurnPass[dev][vc] = ok;
 	fn->m_fwBurnErrCode[dev][vc] = ok ? 0 : br.errorCode;
+	fn->SetFirmwareBurnPercent(dev, vc, 100);
+	FirmwareBurnReportProgress(dev, vc, 100);
 	if (!ok)
 		msgUtf8(DtZh::kFwFail, dev, vc, br.errorCode);
 	delete tp;
@@ -2729,6 +2879,8 @@ static void MarkDevFirmwareBurnFailed(DtCarFunction* fn, int devId, int errCode 
 			continue;
 		fn->m_bFirmwareBurnPass[devId][v] = false;
 		fn->m_fwBurnErrCode[devId][v] = errCode;
+		fn->SetFirmwareBurnPercent(devId, v, 100);
+		FirmwareBurnReportProgress(devId, v, 100);
 	}
 }
 
@@ -2742,6 +2894,8 @@ static void MarkVcFirmwareBurnFailed(DtCarFunction* fn, int devId, int vcId, int
 	fn->m_bFirmwareBurnHasResult = true;
 	fn->m_bFirmwareBurnPass[devId][vcId] = false;
 	fn->m_fwBurnErrCode[devId][vcId] = errCode;
+	fn->SetFirmwareBurnPercent(devId, vcId, 100);
+	FirmwareBurnReportProgress(devId, vcId, 100);
 }
 
 static int FirmwareChipPhaseCount(const GateFirmwareBurnCfg& cfg)
@@ -4516,7 +4670,9 @@ int DtCarFunction::Enum() {
 		msg("No test box detected.\n");
 		return -1;
 	}
+	RefreshFa132SlotsAfterEnum();
 	LoadChannelEnableIni();
+	ClampChannelEnableToEnum();
 	if (!HasAnyChannelEnabled())
 		ApplyChannelEnableDefaultsAfterEnum();
 	return 1;
@@ -4669,7 +4825,12 @@ bool DtCarFunction::InitWorkCapture(int devId)
 		const int pwrRet = ::carInitPower(devId);
 		msgUtf8(DtZh::kLogDevInitPower, devId, pwrRet);
 		if (pwrRet != DT_ERROR_OK)
+		{
+			m_workGrabInitTick[devId] = ::GetTickCount();
+			m_workGrabInitDone[devId] = true;
+			NotifyPreviewStreamRefresh();
 			return false;
+		}
 		m_workPowerReady[devId] = true;
 	}
 
@@ -4678,9 +4839,15 @@ bool DtCarFunction::InitWorkCapture(int devId)
 	if (iRet != DT_ERROR_OK)
 	{
 		UninitWorkCapture(devId, true);
+		m_workGrabInitTick[devId] = ::GetTickCount();
+		m_workGrabInitDone[devId] = true;
+		NotifyPreviewStreamRefresh();
 		return false;
 	}
 	m_workGrabReady[devId] = true;
+	m_workGrabInitTick[devId] = ::GetTickCount();
+	m_workGrabInitDone[devId] = true;
+	NotifyPreviewStreamRefresh();
 	return true;
 }
 
@@ -4819,6 +4986,8 @@ int DtCarFunction::StartFirmwarePrep()
 	{
 		m_workPowerReady[i] = false;
 		m_workGrabReady[i] = false;
+		m_workGrabInitDone[i] = false;
+		m_workGrabInitTick[i] = 0;
 	}
 	ResetPreviewDisplay();
 	InitAllPreviewDisplays();
@@ -4899,6 +5068,8 @@ int DtCarFunction::Start() {
 	{
 		m_workPowerReady[i] = false;
 		m_workGrabReady[i] = false;
+		m_workGrabInitDone[i] = false;
+		m_workGrabInitTick[i] = 0;
 	}
 	ResetPreviewDisplay();
 	InitAllPreviewDisplays();

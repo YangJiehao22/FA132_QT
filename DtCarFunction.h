@@ -20,6 +20,8 @@ extern void msg(LPCSTR lpszFmt, ...);
 #define WM_FW_BURN_PROGRESS (WM_USER + 4)
 /** Firmware prep worker finished (WPARAM=1 OK / 0 fail, LPARAM=prep generation). */
 #define WM_FW_PREP_DONE (WM_USER + 5)
+/** Preview grid layout finished; repaint cells after MoveWindow (WM_USER + 6). */
+#define WM_PREVIEW_GRID_REPAINT (WM_USER + 6)
 
 /** Passed to main dialog for UI-thread carDrawImage (MFC preview HWND). */
 struct DtUiDrawPack
@@ -95,8 +97,27 @@ public:
 
 	bool IsDevEnabled(int dev) const;
 	bool IsVcEnabled(int dev, int vc) const;
+	/** Dev index within current Enum result. */
+	bool IsDevEnumPresent(int dev) const;
+	/** Logical FA132 slot 0..3 (Dev 8k..8k+7). */
+	bool IsFa132SlotOnline(int slot) const;
+	int CountFa132SlotsOnline() const;
+	static int Fa132SlotForDev(int dev);
+	enum Fa132SlotTestResult
+	{
+		Fa132SlotResultNone = 0,
+		Fa132SlotResultOk,
+		Fa132SlotResultNg,
+	};
+	/** Per-slot OK/NG from last burn/verify/light-test (enabled channels only). */
+	bool QueryFa132SlotTestResult(int slot, Fa132SlotTestResult* outResult, int* outNgCount, int* outEnabledCount) const;
+	void RefreshFa132SlotsAfterEnum();
+	void ClampChannelEnableToEnum();
+	/** Per FA132 online flags after Enum (4 slots). */
+	BOOL m_bFa132SlotOnline[MAX_CC16];
 	/** Enabled channel with valid visible preview size (for carDrawImage). */
 	bool IsPreviewCellReady(int dev, int vc) const;
+	void NotifyPreviewStreamRefresh() const;
 	/** True if at least one enumerated Dev has an enabled VC. */
 	bool HasAnyChannelEnabled() const;
 	void ResetChannelEnable();
@@ -116,6 +137,7 @@ public:
 	bool EnsurePreviewDisplay(int dev, int vc);
 	void ResetPreviewDisplay();
 	void InitAllPreviewDisplays();
+	void InitPreviewDisplaysForDevRange(int baseDev, int devCount);
 
 	/* DtCar.ini path next to exe */
 	CString m_strDtCarIniPath;
@@ -127,6 +149,10 @@ public:
 	bool    m_bPauseCaptureForBurn;	/* pause grab for firmware burn; keep power/grab init */
 	bool    m_workPowerReady[MAX_CC16 * MAX_DEV];
 	bool    m_workGrabReady[MAX_CC16 * MAX_DEV];
+	/** InitWorkCapture finished (pass or fail) for this Dev. */
+	bool    m_workGrabInitDone[MAX_CC16 * MAX_DEV];
+	/** GetTickCount() when InitWorkCapture last completed for this Dev. */
+	DWORD   m_workGrabInitTick[MAX_CC16 * MAX_DEV];
 	/** After ReloadGrabParaAfterPowerCycle: skip one main-INI reload in InitWorkCapture. */
 	bool    m_skipMainGrabReloadOnce[MAX_CC16 * MAX_DEV];
 	bool    m_previewDisplayInit[MAX_CC16 * MAX_DEV][MAX_VC];

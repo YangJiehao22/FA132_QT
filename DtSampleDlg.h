@@ -6,6 +6,8 @@
 #include "afxwin.h"
 #include "afxbutton.h"
 #include "DtCarFunction.h"
+#include "DtFa132UiBar.h"
+#include "DtMesBar.h"
 
 // CDtSampleDlg dialog
 class CDtSampleDlg : public CDialogEx
@@ -35,6 +37,8 @@ protected:
 	afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
 	afx_msg void OnPaint();
 	afx_msg void OnSize(UINT nType, int cx, int cy);
+	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
+	afx_msg void OnTcnSelchangeTabFa132(NMHDR* pNMHDR, LRESULT* pResult);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnClose();
 
@@ -52,8 +56,24 @@ protected:
 public:
 	void PopupMenu(int iIndex, int uWndCtrIDIndex);
 
-	int ReSize();
-	void ChangeModuleSize(int nID, int nCamCnt, CRect rect, UINT VideoWinID);
+	int ReSize(bool schedulePreviewRepaint = true);
+	void ChangeModuleSize(int nID, int nCamCnt, CRect rect, UINT VideoWinID, int globalDevBase);
+	void InitFa132TabUi();
+	void RefreshFa132Ui();
+	void UpdateFa132OverviewOnly();
+	void SyncFa132StripVisualState();
+	void FocusFirstNgFa132Tab();
+	void SchedulePreviewGridRepaint();
+	void RedrawPreviewGrid();
+	void OnFa132TabChanged();
+	int ActiveFa132TabBaseDev() const;
+	int GlobalDevForLayout(int localDev) const;
+	bool IsGlobalDevOnActiveTab(int globalDev) const;
+	CWnd* GetPreviewWndForGlobalDev(int globalDev, int vc) const;
+	void ClearAllPreviewVideoBindings();
+	void ClearAllPreviewCellSurfaces(COLORREF bg);
+	void PaintPreviewCellVideoIdle(int globalDev, int vc);
+	void PaintPreviewCellDisconnected(int localDev, int vc);
 	int LayoutToolbar(const CRect& rcClient);
 	void InitStyledToolbarButtons();
 	void UpdatePrimaryButtonLooks();
@@ -88,7 +108,16 @@ public:
 	BOOL m_bOpen;
 	BOOL m_bStart;
 
-	UINT m_uWndCtrlID[MAX_CC16 * MAX_DEV][MAX_VC];
+	UINT m_uWndCtrlID[MAX_DEV][MAX_VC];
+
+	CDtMesBar m_mesBar;
+	CDtFa132TabCtrl m_tabFa132;
+	CDtFa132OverviewBar m_fa132Overview;
+	int m_iActiveFa132Tab;
+	BOOL m_bPreviewGridRepaintPosted;
+	CFont m_fontTab;
+	CFont m_fontOverview;
+	CFont m_fontMesEdit;
 
 	/** Async firmware prep / burn (UI thread must not block on InitGrab or burn). */
 	HANDLE m_hFwPrepThread;
@@ -98,6 +127,11 @@ public:
 	DWORD m_fwBurnHandledGen;
 	BOOL m_bFwPowerCyclePending;
 	BOOL m_bPreviewFrozen;
+	/** Keep Burn OK/NG painted while capture stopped for post-burn power cycle. */
+	BOOL m_bPreviewBurnStickyHold;
+	/** After post-burn power-on: streaming wait / no-signal until final results. */
+	BOOL m_bPreviewPostPowerStream;
+	BOOL m_bPreviewStreamSettleDone;
 	/** STREAM_GATE phase-2: wait after I2C before sampling fps for light test. */
 	BOOL m_bLightTestAfterI2cSettle;
 
@@ -116,6 +150,7 @@ public:
 	afx_msg LRESULT OnFwPrepDone(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnFwBurnDone(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnFwBurnProgress(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnPreviewGridRepaint(WPARAM wParam, LPARAM lParam);
 
 	static unsigned __stdcall FirmwarePrepWorkerProc(void* param);
 	static unsigned __stdcall FirmwareBurnWorkerProc(void* param);
@@ -132,6 +167,19 @@ public:
 	void PaintPreviewCellOff(int dev, int vc);
 	void PaintPreviewCellWait(int dev, int vc);
 	void PaintPreviewCellBurnOk(int dev, int vc);
+	void PaintPreviewCellBurnNg(int dev, int vc);
+	void PaintPreviewCellsFirmwareBurn();
 	void PaintPreviewCellFirmware(int dev, int vc);
+	void PaintPreviewCellStreamingWait(int dev, int vc);
+	void PaintPreviewCellNoSignal(int dev, int vc);
+	void PaintPreviewCellStreamNg(int dev, int vc);
+	void PaintPreviewCellsStreamState();
+	bool ShouldShowPreviewStreamState() const;
+	bool ShouldPaintPreviewStreamNg(int dev) const;
+	void StartPreviewStreamRefreshTimer();
+	void StopPreviewStreamRefreshTimer();
+	void PaintPreviewCellsPostPowerStream();
+	void PaintPreviewCellsPostPowerStreamState();
+	bool IsPreviewCellStreamingLive(int dev, int vc) const;
 	bool IsPreviewChannelOn(int dev, int vc) const;
 };

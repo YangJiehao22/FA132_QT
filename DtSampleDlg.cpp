@@ -4,6 +4,7 @@
 #include "DtSpecDlg.h"
 #include "DtEncoding.h"
 #include "DtZhUtf8.h"
+#include "DtDpiUi.h"
 #include "afxdialogex.h"
 
 #include <sys/stat.h>
@@ -19,6 +20,9 @@
 #endif
 #ifndef TIMER_ID_FW_POWER_OFF
 #define TIMER_ID_FW_POWER_OFF 4
+#endif
+#ifndef TIMER_ID_PREVIEW_STREAM
+#define TIMER_ID_PREVIEW_STREAM 5
 #endif
 
 struct DtFwWorkerParam
@@ -41,7 +45,7 @@ static void ApplyMfcToolbarLook(CMFCButton& b, COLORREF face, COLORREF text, COL
 	b.SetTextHotColor(textHot);
 }
 
-/* Preview cell colors (Plan A): Off / Wait / Burning / Burn OK â€?distinct from legacy Idle gray. */
+/* Preview cell colors (Plan A): Off / Wait / Burning / Burn OK ??distinct from legacy Idle gray. */
 namespace PreviewCellUi {
 	const COLORREF kOffBg = RGB(229, 231, 235);
 	const COLORREF kOffFg = RGB(55, 65, 81);
@@ -58,6 +62,67 @@ namespace PreviewCellUi {
 	const COLORREF kBurnNgFg = RGB(255, 255, 255);
 	const COLORREF kBurnNgBarFill = RGB(248, 113, 113);
 	const COLORREF kBurnNgBarTrack = RGB(69, 10, 10);
+	const COLORREF kVideoIdleBg = RGB(17, 24, 39);
+	const COLORREF kVideoIdleFg = RGB(148, 163, 184);
+	const COLORREF kStreamWaitBg = RGB(30, 41, 59);
+	const COLORREF kStreamWaitFg = RGB(186, 198, 214);
+	const COLORREF kStreamWaitBorder = RGB(100, 116, 139);
+	const COLORREF kNoSignalBg = RGB(41, 37, 36);
+	const COLORREF kNoSignalFg = RGB(251, 191, 36);
+	/** After InitGrab OK: wait this long before showing stream NG (avoid early NGâ†’live flicker). */
+	const DWORD kStreamNgGraceMs = 3000;
+}
+
+static COLORREF g_previewCellEraseBg = PreviewCellUi::kVideoIdleBg;
+
+static LRESULT CALLBACK PreviewCellSubclassProc(
+	HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+	UINT_PTR uIdSubclass, DWORD_PTR /*dwRefData*/)
+{
+	switch (uMsg)
+	{
+	case WM_ERASEBKGND:
+	{
+		HDC hdc = (HDC)wParam;
+		if (hdc == NULL)
+			break;
+		RECT rc = {};
+		::GetClientRect(hWnd, &rc);
+		if (rc.right <= rc.left || rc.bottom <= rc.top)
+			return TRUE;
+		HBRUSH br = ::CreateSolidBrush(g_previewCellEraseBg);
+		if (br != NULL)
+		{
+			::FillRect(hdc, &rc, br);
+			::DeleteObject(br);
+		}
+		return TRUE;
+	}
+	case WM_PAINT:
+	{
+		/* Suppress default static frame/text; content is drawn via PaintPreviewCellState. */
+		PAINTSTRUCT ps = {};
+		::BeginPaint(hWnd, &ps);
+		::EndPaint(hWnd, &ps);
+		return 0;
+	}
+	case WM_NCDESTROY:
+		::RemoveWindowSubclass(hWnd, PreviewCellSubclassProc, uIdSubclass);
+		break;
+	default:
+		break;
+	}
+	return ::DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+static void ApplyPreviewCellWindowStyle(CWnd* pCell, UINT ctrlId)
+{
+	if (pCell == NULL || pCell->GetSafeHwnd() == NULL)
+		return;
+	pCell->ModifyStyle(SS_TYPEMASK | SS_SUNKEN | WS_BORDER, SS_NOTIFY);
+	pCell->ModifyStyleEx(WS_EX_STATICEDGE | WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE, 0);
+	::RemoveWindowSubclass(pCell->GetSafeHwnd(), PreviewCellSubclassProc, (UINT_PTR)ctrlId);
+	::SetWindowSubclass(pCell->GetSafeHwnd(), PreviewCellSubclassProc, (UINT_PTR)ctrlId, 0);
 }
 
 static void SetTriVertex(TRIVERTEX& v, int x, int y, COLORREF c)
@@ -217,7 +282,12 @@ CDtSampleDlg::CDtSampleDlg(CWnd* pParent /*=NULL*/)
 	, m_fwBurnHandledGen((DWORD)-1)
 	, m_bFwPowerCyclePending(FALSE)
 	, m_bPreviewFrozen(FALSE)
+	, m_bPreviewBurnStickyHold(FALSE)
+	, m_bPreviewPostPowerStream(FALSE)
+	, m_bPreviewStreamSettleDone(FALSE)
 	, m_bLightTestAfterI2cSettle(FALSE)
+	, m_iActiveFa132Tab(0)
+	, m_bPreviewGridRepaintPosted(FALSE)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
@@ -324,12 +394,15 @@ BEGIN_MESSAGE_MAP(CDtSampleDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
     ON_WM_TIMER()
     ON_WM_SIZE()
+	ON_WM_DRAWITEM()
+	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_FA132, &CDtSampleDlg::OnTcnSelchangeTabFa132)
     ON_WM_CLOSE()
 	ON_MESSAGE(WM_MSG, OnMsg)
 	ON_MESSAGE(WM_DT_CAR_DRAW, OnDtCarDraw)
 	ON_MESSAGE(WM_FW_PREP_DONE, OnFwPrepDone)
 	ON_MESSAGE(WM_FW_BURN_DONE, OnFwBurnDone)
 	ON_MESSAGE(WM_FW_BURN_PROGRESS, OnFwBurnProgress)
+	ON_MESSAGE(WM_PREVIEW_GRID_REPAINT, OnPreviewGridRepaint)
 	ON_BN_CLICKED(IDC_BUTTON_LOAD, &CDtSampleDlg::OnBnClickedButtonLoad)
 	ON_BN_CLICKED(IDC_BUTTON_ENUM, &CDtSampleDlg::OnBnClickedButtonEnum)
 	ON_BN_CLICKED(IDC_BUTTON_CHANNEL, &CDtSampleDlg::OnBnClickedButtonChannel)
@@ -381,15 +454,48 @@ BOOL CDtSampleDlg::OnInitDialog()
 		m_editMsg.ModifyStyleEx(0, WS_EX_STATICEDGE);
 
 	int WndCtrlID = 2000;
-	for (int i = 0;i < 8;i++)
+	for (int i = 0; i < MAX_DEV; i++)
 	{
-		for (int j = 0;j < 4;j++)
+		for (int j = 0; j < MAX_VC; j++)
 		{
 			m_uWndCtrlID[i][j] = WndCtrlID;
-			m_dtFunction.m_hWndVideo[i][j] = GetDlgItem(WndCtrlID)->GetSafeHwnd();
+			if (CWnd* pCell = GetDlgItem(WndCtrlID))
+				ApplyPreviewCellWindowStyle(pCell, WndCtrlID);
 			WndCtrlID++;
 		}
 	}
+
+	if (m_tabFa132.GetSafeHwnd() == NULL)
+	{
+		m_tabFa132.Create(
+			WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TCS_FIXEDWIDTH | TCS_OWNERDRAWFIXED,
+			CRect(0, 0, 100, 40), this, IDC_TAB_FA132);
+	}
+	if (m_fa132Overview.GetSafeHwnd() == NULL)
+	{
+		m_fa132Overview.Create(
+			_T(""), WS_CHILD | WS_VISIBLE | SS_NOPREFIX | SS_NOTIFY,
+			CRect(0, 0, 100, 48), this, IDC_STATIC_FA132_OVERVIEW);
+	}
+	const double uiScale = DtGetWindowUiScale(m_hWnd);
+	DtCreateUiFont(m_fontTab, 10, true, m_hWnd);
+	DtCreateUiFont(m_fontOverview, 9, false, m_hWnd);
+	DtCreateUiFont(m_fontMesEdit, 9, false, m_hWnd);
+	if (m_mesBar.GetSafeHwnd() == NULL)
+	{
+		m_mesBar.SetUiScale(uiScale);
+		m_mesBar.SetBarFont(&m_fontOverview);
+		m_mesBar.SetEditFont(&m_fontMesEdit);
+		m_mesBar.Create(this, IDC_MES_BAR);
+	}
+	m_tabFa132.SetUiScale(uiScale);
+	m_tabFa132.SetTabFont(&m_fontTab);
+	m_fa132Overview.SetUiScale(uiScale);
+	m_fa132Overview.SetBarFont(&m_fontOverview);
+	m_mesBar.SetUiScale(uiScale);
+	m_mesBar.SetBarFont(&m_fontOverview);
+	m_mesBar.SetEditFont(&m_fontMesEdit);
+	InitFa132TabUi();
 
 	msgUtf8(DtZh::kLogAppBanner1);
 	msgUtf8(DtZh::kLogAppBanner2);
@@ -405,7 +511,6 @@ BOOL CDtSampleDlg::OnInitDialog()
 	m_dtFunction.SetFirmwareBurnProgressWnd(m_hWnd);
 
 	ReSize();
-	m_dtFunction.InitAllPreviewDisplays();
 
 	return TRUE;
 }
@@ -457,7 +562,10 @@ LRESULT CDtSampleDlg::OnDtCarDraw(WPARAM wP, LPARAM lP)
 	if (p == NULL || p->hVideoWnd == NULL || !::IsWindow(p->hVideoWnd))
 		return DT_ERROR_FAILED;
 
-	if (m_bPreviewFrozen || m_dtFunction.IsFirmwareBurnCellActive(p->devId, p->vcId))
+	if (m_bPreviewFrozen || m_bPreviewBurnStickyHold
+		|| m_dtFunction.IsFirmwareBurnCellActive(p->devId, p->vcId))
+		return DT_ERROR_OK;
+	if (!IsGlobalDevOnActiveTab(p->devId))
 		return DT_ERROR_OK;
 
 	DrawImage_t di;
@@ -515,6 +623,8 @@ void CDtSampleDlg::OnBnClickedButtonLoad()
 void CDtSampleDlg::OnBnClickedButtonEnum()
 {
 	m_dtFunction.Enum();
+	InitFa132TabUi();
+	RefreshFa132Ui();
 	ReSize();
 }
 
@@ -534,10 +644,9 @@ void CDtSampleDlg::OnBnClickedButtonChannel()
 		msgUtf8(DtZh::kDlgChannelAutoClose);
 	}
 	m_dtFunction.ShowChannelSelectDialog(this);
-	ReSize();
-	m_dtFunction.InitAllPreviewDisplays();
+	ReSize(false);
 	m_bPreviewFrozen = FALSE;
-	PaintPreviewCellsIdle();
+	RedrawPreviewGrid();
 }
 
 void CDtSampleDlg::OnBnClickedButtonOpen()
@@ -548,9 +657,8 @@ void CDtSampleDlg::OnBnClickedButtonOpen()
 			return;
 		m_bOpen = TRUE;
 		m_bPreviewFrozen = FALSE;
-		ReSize();
-		m_dtFunction.InitAllPreviewDisplays();
-		PaintPreviewCellsIdle();
+		ReSize(false);
+		RedrawPreviewGrid();
 	}
 	else {
 		if (m_bStart)
@@ -586,6 +694,9 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 	if (!m_bStart)
 	{
 		m_bPreviewFrozen = FALSE;
+		m_bPreviewBurnStickyHold = FALSE;
+		m_bPreviewPostPowerStream = FALSE;
+		m_bPreviewStreamSettleDone = FALSE;
 		m_bLightTestAfterI2cSettle = FALSE;
 		SetWindowText(_T("QT_FA132_Software"));
 		m_dtFunction.ClearLightGateResults();
@@ -597,6 +708,7 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
 		KillTimer(TIMER_ID_FW_POWER_OFF);
 		KillTimer(TIMER_ID_STREAM_GATE);
+		StopPreviewStreamRefreshTimer();
 		if (fwBurn)
 		{
 			++m_fwPrepGeneration;
@@ -615,6 +727,7 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 			m_bStart = TRUE;
 			m_dtFunction.LogProductionRunStart();
 			SetTimer(0, 1000, NULL);
+			StartPreviewStreamRefreshTimer();
 			ScheduleFirmwareVerifyThenLightTest();
 		}
 	}
@@ -642,6 +755,16 @@ void CDtSampleDlg::OnSize(UINT nType, int cx, int cy)
 	if (rc.Width() <= 0 || rc.Height() <= 0)
 		return;
 	ReSize();
+}
+
+void CDtSampleDlg::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
+{
+	if (nIDCtl == IDC_TAB_FA132 && lpDrawItemStruct != NULL)
+	{
+		m_tabFa132.DrawTabItem(lpDrawItemStruct);
+		return;
+	}
+	CDialogEx::OnDrawItem(nIDCtl, lpDrawItemStruct);
 }
 
 void CDtSampleDlg::OnClose()
@@ -680,17 +803,21 @@ BOOL CDtSampleDlg::PreTranslateMessage(MSG* pMsg)
 {
     if ( pMsg->message == WM_RBUTTONDOWN )
     {
-        /* 32 previews: 8 Dev x 4 VC, map to m_hWndVideo[i][j] */
-		 for (int i = 0; i < 8; i++) {
-			 for (int j = 0; j < 4; j++)
+        /* 32 previews on active FA132 tab: map HWND to global Dev/VC */
+		 for (int i = 0; i < MAX_DEV; i++) {
+			 for (int j = 0; j < MAX_VC; j++)
 			 {
-				 if (pMsg->hwnd == GetDlgItem(m_uWndCtrlID[i][j])->GetSafeHwnd())
+				 CWnd* pCell = GetDlgItem(m_uWndCtrlID[i][j]);
+				 if (pCell != NULL && pMsg->hwnd == pCell->GetSafeHwnd())
 				 {
-					 PopupMenu(i, j);
+					 PopupMenu(GlobalDevForLayout(i), j);
 				 }
 			 }
 		 }
     }
+
+	if (m_mesBar.PreTranslateScanMessage(pMsg))
+		return TRUE;
 
     return CDialogEx::PreTranslateMessage(pMsg);
 }
@@ -854,7 +981,7 @@ void CDtSampleDlg::StopCaptureForFirmwarePowerCycle()
 {
 	WaitForFwPrepThread(0);
 	WaitForFwBurnThread(0);
-	ClearFwBurnCellOverlay();
+	ClearFwBurnCellOverlay(false);
 	if (m_bStart)
 	{
 		m_dtFunction.Stop();
@@ -862,8 +989,10 @@ void CDtSampleDlg::StopCaptureForFirmwarePowerCycle()
 		KillTimer(0);
 		KillTimer(TIMER_ID_FW_BURN);
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
+		StopPreviewStreamRefreshTimer();
 	}
-	InvalidateEnabledPreviewCells();
+	m_bPreviewBurnStickyHold = TRUE;
+	PaintPreviewCellsBurnSticky();
 }
 
 void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
@@ -885,7 +1014,11 @@ void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 			m_dtFunction.ClearFirmwareBurnUiState();
 		KillTimer(TIMER_ID_FW_POWER_OFF);
 		KillTimer(TIMER_ID_STREAM_GATE);
+		StopPreviewStreamRefreshTimer();
 		m_bPreviewFrozen = TRUE;
+		m_bPreviewBurnStickyHold = FALSE;
+		m_bPreviewPostPowerStream = FALSE;
+		m_bPreviewStreamSettleDone = FALSE;
 		if (m_dtFunction.m_bLightGateHasResult)
 			PaintPreviewCellsTestResult();
 		else if (AnyFirmwareBurnChannelFailed())
@@ -910,6 +1043,8 @@ void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
 	}
 	if (!forFwPowerCycle)
 	{
+		SyncFa132StripVisualState();
+		FocusFirstNgFa132Tab();
 		if (m_btnStart.GetSafeHwnd())
 			m_btnStart.SetWindowText(_T("Start"));
 		else if (GetDlgItem(IDC_BUTTON_START))
@@ -1036,8 +1171,9 @@ LRESULT CDtSampleDlg::OnFwBurnDone(WPARAM wParam, LPARAM lParam)
 	if (!m_bStart && !m_bFwPowerCyclePending)
 		return 0;
 
-	PaintPreviewCellsBurnSticky();
 	ClearFwBurnCellOverlay(false);
+	m_bPreviewBurnStickyHold = TRUE;
+	PaintPreviewCellsBurnSticky();
 	ContinueAfterFirmwareBurn();
 	return 0;
 }
@@ -1082,28 +1218,274 @@ bool CDtSampleDlg::AnyFirmwareBurnChannelFailed() const
 
 bool CDtSampleDlg::IsPreviewChannelOn(int dev, int vc) const
 {
-	return dev < m_dtFunction.m_iEnumDevNum && vc < m_dtFunction.m_iVcNum
+	if (!m_dtFunction.IsDevEnumPresent(dev) || !m_dtFunction.IsFa132SlotOnline(DtCarFunction::Fa132SlotForDev(dev)))
+		return false;
+	return vc < m_dtFunction.m_iVcNum
 		&& m_dtFunction.IsDevEnabled(dev) && m_dtFunction.IsVcEnabled(dev, vc);
+}
+
+int CDtSampleDlg::ActiveFa132TabBaseDev() const
+{
+	if (m_iActiveFa132Tab < 0)
+		return 0;
+	return m_iActiveFa132Tab * MAX_DEV;
+}
+
+int CDtSampleDlg::GlobalDevForLayout(int localDev) const
+{
+	return ActiveFa132TabBaseDev() + localDev;
+}
+
+bool CDtSampleDlg::IsGlobalDevOnActiveTab(int globalDev) const
+{
+	if (globalDev < 0 || globalDev >= MAX_CC16 * MAX_DEV)
+		return false;
+	return (globalDev / MAX_DEV) == m_iActiveFa132Tab;
+}
+
+CWnd* CDtSampleDlg::GetPreviewWndForGlobalDev(int globalDev, int vc) const
+{
+	if (!IsGlobalDevOnActiveTab(globalDev) || vc < 0 || vc >= MAX_VC)
+		return NULL;
+	const int localDev = globalDev % MAX_DEV;
+	return GetDlgItem(m_uWndCtrlID[localDev][vc]);
+}
+
+void CDtSampleDlg::ClearAllPreviewVideoBindings()
+{
+	for (int gd = 0; gd < MAX_CC16 * MAX_DEV; gd++)
+	{
+		for (int v = 0; v < MAX_VC; v++)
+			m_dtFunction.SetVideoCellLayout(gd, v, NULL, 0, 0);
+	}
+}
+
+void CDtSampleDlg::ClearAllPreviewCellSurfaces(COLORREF bg)
+{
+	g_previewCellEraseBg = bg;
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		for (int v = 0; v < MAX_VC; v++)
+		{
+			CWnd* pWnd = GetDlgItem(m_uWndCtrlID[ld][v]);
+			if (pWnd == NULL || pWnd->GetSafeHwnd() == NULL)
+				continue;
+			CRect r;
+			pWnd->GetClientRect(&r);
+			if (r.IsRectEmpty())
+				continue;
+			CClientDC dc(pWnd);
+			dc.FillSolidRect(&r, bg);
+		}
+	}
+}
+
+void CDtSampleDlg::PaintPreviewCellVideoIdle(int globalDev, int vc)
+{
+	CString tip;
+	tip.Format(_T("D%d V%d"), globalDev, vc);
+	PaintPreviewCellState(globalDev, vc, tip, PreviewCellUi::kVideoIdleBg, PreviewCellUi::kVideoIdleFg);
+}
+
+void CDtSampleDlg::InitFa132TabUi()
+{
+	if (m_tabFa132.GetSafeHwnd() == NULL)
+		return;
+	int keepSel = m_iActiveFa132Tab;
+	if (keepSel < 0 && m_tabFa132.GetItemCount() > 0)
+		keepSel = m_tabFa132.GetCurSel();
+	while (m_tabFa132.GetItemCount() > 0)
+		m_tabFa132.DeleteItem(0);
+
+	TCITEM ti = {};
+	ti.mask = TCIF_TEXT;
+	for (int s = 0; s < MAX_CC16; s++)
+	{
+		CString label;
+		label.Format(_T("FA132-%d"), s + 1);
+		ti.pszText = label.GetBuffer();
+		m_tabFa132.InsertItem(s, &ti);
+		label.ReleaseBuffer();
+	}
+	if (m_iActiveFa132Tab < 0 || m_iActiveFa132Tab >= MAX_CC16)
+		m_iActiveFa132Tab = 0;
+	if (keepSel >= 0 && keepSel < MAX_CC16)
+		m_iActiveFa132Tab = keepSel;
+	m_tabFa132.SetCurSel(m_iActiveFa132Tab);
+	SyncFa132StripVisualState();
+}
+
+void CDtSampleDlg::SyncFa132StripVisualState()
+{
+	const bool showRunResult = m_bPreviewFrozen && (
+		m_dtFunction.m_bLightGateHasResult
+		|| m_dtFunction.m_bFirmwareBurnVerifyHasResult
+		|| m_dtFunction.m_bFirmwareBurnHasResult);
+	int ngSlotCount = 0;
+	int okSlotCount = 0;
+
+	for (int s = 0; s < MAX_CC16; s++)
+	{
+		m_tabFa132.SetSlotOnline(s, m_dtFunction.IsFa132SlotOnline(s));
+		m_fa132Overview.SetSlotOnline(s, m_dtFunction.IsFa132SlotOnline(s));
+
+		DtCarFunction::Fa132SlotTestResult slotResult = DtCarFunction::Fa132SlotResultNone;
+		int ngCount = 0;
+		int enabledCount = 0;
+		if (showRunResult && m_dtFunction.IsFa132SlotOnline(s))
+			m_dtFunction.QueryFa132SlotTestResult(s, &slotResult, &ngCount, &enabledCount);
+		m_tabFa132.SetSlotTestResult(s, slotResult, ngCount);
+		m_fa132Overview.SetSlotTestResult(s, slotResult, ngCount);
+
+		if (showRunResult && enabledCount > 0)
+		{
+			if (slotResult == DtCarFunction::Fa132SlotResultNg)
+				ngSlotCount++;
+			else if (slotResult == DtCarFunction::Fa132SlotResultOk)
+				okSlotCount++;
+		}
+	}
+
+	m_fa132Overview.SetOnlineCount(m_dtFunction.CountFa132SlotsOnline());
+	m_fa132Overview.SetActiveTab(m_iActiveFa132Tab);
+	m_fa132Overview.SetRunSummary(showRunResult, ngSlotCount, okSlotCount);
+	if (m_mesBar.GetSafeHwnd() != NULL)
+	{
+		m_mesBar.SetActiveTab(m_iActiveFa132Tab);
+		for (int s = 0; s < MAX_CC16; s++)
+			m_mesBar.SetSlotOnline(s, m_dtFunction.IsFa132SlotOnline(s));
+	}
+	if (m_tabFa132.GetSafeHwnd() != NULL)
+		m_tabFa132.Invalidate(FALSE);
+	if (m_fa132Overview.GetSafeHwnd() != NULL)
+		m_fa132Overview.Invalidate(FALSE);
+}
+
+void CDtSampleDlg::FocusFirstNgFa132Tab()
+{
+	if (!m_bPreviewFrozen)
+		return;
+	for (int s = 0; s < MAX_CC16; s++)
+	{
+		if (!m_dtFunction.IsFa132SlotOnline(s))
+			continue;
+		DtCarFunction::Fa132SlotTestResult slotResult = DtCarFunction::Fa132SlotResultNone;
+		int ngCount = 0;
+		int enabledCount = 0;
+		m_dtFunction.QueryFa132SlotTestResult(s, &slotResult, &ngCount, &enabledCount);
+		if (slotResult != DtCarFunction::Fa132SlotResultNg)
+			continue;
+		if (m_tabFa132.GetSafeHwnd() == NULL)
+			return;
+		m_tabFa132.SetCurSel(s);
+		OnFa132TabChanged();
+		return;
+	}
+}
+
+void CDtSampleDlg::UpdateFa132OverviewOnly()
+{
+	SyncFa132StripVisualState();
+}
+
+void CDtSampleDlg::RefreshFa132Ui()
+{
+	InitFa132TabUi();
+	UpdateFa132OverviewOnly();
+}
+
+void CDtSampleDlg::SchedulePreviewGridRepaint()
+{
+	if (m_bPreviewGridRepaintPosted)
+		return;
+	m_bPreviewGridRepaintPosted = TRUE;
+	PostMessage(WM_PREVIEW_GRID_REPAINT, 0, 0);
+}
+
+LRESULT CDtSampleDlg::OnPreviewGridRepaint(WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+	m_bPreviewGridRepaintPosted = FALSE;
+	RedrawPreviewGrid();
+	return 0;
+}
+
+void CDtSampleDlg::RedrawPreviewGrid()
+{
+	m_dtFunction.InitPreviewDisplaysForDevRange(ActiveFa132TabBaseDev(), MAX_DEV);
+	if (!m_bPreviewFrozen)
+	{
+		if (m_bPreviewBurnStickyHold && m_dtFunction.m_bFirmwareBurnHasResult)
+			PaintPreviewCellsBurnSticky();
+		else if (m_dtFunction.IsFirmwareBurnInProgress()
+			|| (m_dtFunction.IsFirmwareBurnOverlayActive() && m_dtFunction.m_bFirmwareBurnHasResult))
+			PaintPreviewCellsFirmwareBurn();
+		else if (ShouldShowPreviewStreamState())
+			PaintPreviewCellsStreamState();
+		else if (m_bPreviewPostPowerStream)
+			PaintPreviewCellsPostPowerStreamState();
+		else
+			PaintPreviewCellsIdle();
+	}
+	else if (m_dtFunction.m_bLightGateHasResult)
+		PaintPreviewCellsTestResult();
+	else if (m_dtFunction.m_bFirmwareBurnHasResult)
+		PaintPreviewCellsBurnSticky();
+}
+
+void CDtSampleDlg::OnTcnSelchangeTabFa132(NMHDR* /*pNMHDR*/, LRESULT* pResult)
+{
+	OnFa132TabChanged();
+	if (pResult != NULL)
+		*pResult = 0;
+}
+
+void CDtSampleDlg::OnFa132TabChanged()
+{
+	if (m_tabFa132.GetSafeHwnd() != NULL)
+		m_iActiveFa132Tab = m_tabFa132.GetCurSel();
+	if (m_iActiveFa132Tab < 0)
+		m_iActiveFa132Tab = 0;
+	if (m_iActiveFa132Tab >= MAX_CC16)
+		m_iActiveFa132Tab = MAX_CC16 - 1;
+	SyncFa132StripVisualState();
+	ReSize(false);
+	RedrawPreviewGrid();
+}
+
+void CDtSampleDlg::PaintPreviewCellDisconnected(int localDev, int vc)
+{
+	const int globalDev = GlobalDevForLayout(localDev);
+	CString tip;
+	tip.Format(Utf8ToCString(DtZh::kPreviewSlotOffline), globalDev, vc);
+	PaintPreviewCellState(globalDev, vc, tip, PreviewCellUi::kOffBg, PreviewCellUi::kOffFg);
 }
 
 void CDtSampleDlg::PaintPreviewCellsBurnSticky()
 {
-	for (int d = 0; d < 8; d++)
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
 	{
-		for (int v = 0; v < 4; v++)
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
 		{
 			if (!IsPreviewChannelOn(d, v))
 			{
-				PaintPreviewCellOff(d, v);
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
 				continue;
 			}
 			if (m_dtFunction.m_bFirmwareBurnPass[d][v])
 				PaintPreviewCellBurnOk(d, v);
 			else
-			{
-				m_dtFunction.SetFirmwareBurnPercent(d, v, 100);
-				PaintPreviewCellFirmware(d, v);
-			}
+				PaintPreviewCellBurnNg(d, v);
 		}
 	}
 }
@@ -1116,15 +1498,19 @@ void CDtSampleDlg::PaintPreviewCellsBurnResult()
 
 void CDtSampleDlg::InvalidateEnabledPreviewCells()
 {
-	for (int d = 0; d < m_dtFunction.m_iEnumDevNum; d++)
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
+		return;
+	const int base = ActiveFa132TabBaseDev();
+	for (int ld = 0; ld < MAX_DEV; ld++)
 	{
-		if (!m_dtFunction.IsDevEnabled(d))
+		const int d = base + ld;
+		if (!m_dtFunction.IsDevEnumPresent(d) || !m_dtFunction.IsDevEnabled(d))
 			continue;
 		for (int v = 0; v < m_dtFunction.m_iVcNum; v++)
 		{
 			if (!m_dtFunction.IsVcEnabled(d, v))
 				continue;
-			CWnd* pWnd = GetDlgItem(m_uWndCtrlID[d][v]);
+			CWnd* pWnd = GetPreviewWndForGlobalDev(d, v);
 			if (pWnd != NULL && pWnd->GetSafeHwnd() != NULL)
 				pWnd->Invalidate(TRUE);
 		}
@@ -1135,9 +1521,11 @@ void CDtSampleDlg::PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF 
 {
 	if (dev < 0 || dev >= MAX_CC16 * MAX_DEV || vc < 0 || vc >= MAX_VC)
 		return;
-	CWnd* pWnd = GetDlgItem(m_uWndCtrlID[dev][vc]);
+	CWnd* pWnd = GetPreviewWndForGlobalDev(dev, vc);
 	if (pWnd == NULL || pWnd->GetSafeHwnd() == NULL)
 		return;
+
+	g_previewCellEraseBg = bg;
 
 	CClientDC dc(pWnd);
 	CRect rFull;
@@ -1158,7 +1546,11 @@ void CDtSampleDlg::PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF 
 	}
 
 	CFont font;
-	const int pt = (rFull.Width() < 80) ? 9 : 11;
+	int pt = 11;
+	if (rFull.Width() < 80 || rFull.Height() < 60)
+		pt = 9;
+	else if (rFull.Width() > 160 || rFull.Height() > 120)
+		pt = min(18, max(11, min(rFull.Width(), rFull.Height()) / 10));
 	font.CreateFont(
 		-MulDiv(pt, dc.GetDeviceCaps(LOGPIXELSY), 72), 0, 0, 0, FW_BOLD,
 		FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -1178,6 +1570,7 @@ void CDtSampleDlg::PaintPreviewCellState(int dev, int vc, LPCTSTR tip, COLORREF 
 	CRect rDraw(x0, y0, x0 + textW, y0 + textH);
 	dc.DrawText(tip, &rDraw, DT_CENTER | DT_TOP | DT_WORDBREAK);
 	dc.SelectObject(pOld);
+	pWnd->ValidateRect(&rFull);
 	pWnd->ShowWindow(SW_SHOW);
 	pWnd->UpdateWindow();
 }
@@ -1203,27 +1596,243 @@ void CDtSampleDlg::PaintPreviewCellBurnOk(int dev, int vc)
 	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kBurnOkBg, PreviewCellUi::kBurnOkFg);
 }
 
-void CDtSampleDlg::PaintPreviewCellsIdle()
+void CDtSampleDlg::PaintPreviewCellBurnNg(int dev, int vc)
 {
-	for (int d = 0; d < 8; d++)
+	CString tip;
+	tip.Format(_T("D%d V%d\nBurn NG"), dev, vc);
+	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kBurnNgBg, PreviewCellUi::kBurnNgFg);
+}
+
+void CDtSampleDlg::PaintPreviewCellsFirmwareBurn()
+{
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
 	{
-		for (int v = 0; v < 4; v++)
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
 		{
 			if (!IsPreviewChannelOn(d, v))
-				PaintPreviewCellOff(d, v);
+			{
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
+				continue;
+			}
+			PaintPreviewCellFirmware(d, v);
+		}
+	}
+}
+
+void CDtSampleDlg::PaintPreviewCellStreamingWait(int dev, int vc)
+{
+	CString tip;
+	tip.Format(Utf8ToCString(DtZh::kPreviewStreamingWait), dev, vc);
+	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kStreamWaitBg, PreviewCellUi::kStreamWaitFg, true);
+}
+
+void CDtSampleDlg::PaintPreviewCellNoSignal(int dev, int vc)
+{
+	CString tip;
+	tip.Format(Utf8ToCString(DtZh::kPreviewNoSignal), dev, vc);
+	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kNoSignalBg, PreviewCellUi::kNoSignalFg);
+}
+
+bool CDtSampleDlg::IsPreviewCellStreamingLive(int dev, int vc) const
+{
+	if (!IsPreviewChannelOn(dev, vc))
+		return false;
+	const VcData_t& vd = m_dtFunction.m_tVcData[dev][vc];
+	if (vd.dSsrFrameRate >= 0.5)
+		return true;
+	return (vd.uFrameCount > 0);
+}
+
+void CDtSampleDlg::PaintPreviewCellStreamNg(int dev, int vc)
+{
+	CString tip;
+	tip.Format(Utf8ToCString(DtZh::kPreviewStreamNg), dev, vc);
+	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kBurnNgBg, PreviewCellUi::kBurnNgFg);
+}
+
+bool CDtSampleDlg::ShouldShowPreviewStreamState() const
+{
+	if (!m_bStart || m_bPreviewFrozen)
+		return false;
+	if (m_bPreviewBurnStickyHold || m_bPreviewPostPowerStream)
+		return false;
+	if (m_dtFunction.IsFirmwareBurnInProgress() || m_dtFunction.IsFirmwareBurnOverlayActive())
+		return false;
+	return (m_dtFunction.m_bRunning != FALSE);
+}
+
+bool CDtSampleDlg::ShouldPaintPreviewStreamNg(int dev) const
+{
+	if (dev < 0 || dev >= MAX_CC16 * MAX_DEV)
+		return false;
+	if (!m_dtFunction.m_workGrabInitDone[dev])
+		return false;
+	if (!m_dtFunction.m_workGrabReady[dev])
+		return true;
+	const DWORD now = ::GetTickCount();
+	const DWORD elapsed = now - m_dtFunction.m_workGrabInitTick[dev];
+	return elapsed >= PreviewCellUi::kStreamNgGraceMs;
+}
+
+void CDtSampleDlg::StartPreviewStreamRefreshTimer()
+{
+	SetTimer(TIMER_ID_PREVIEW_STREAM, 800, NULL);
+}
+
+void CDtSampleDlg::StopPreviewStreamRefreshTimer()
+{
+	KillTimer(TIMER_ID_PREVIEW_STREAM);
+}
+
+void CDtSampleDlg::PaintPreviewCellsStreamState()
+{
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
+	{
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
+		{
+			if (!IsPreviewChannelOn(d, v))
+			{
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
+				continue;
+			}
+			if (IsPreviewCellStreamingLive(d, v))
+				continue;
+			if (!m_dtFunction.m_workGrabInitDone[d] || !ShouldPaintPreviewStreamNg(d))
+				PaintPreviewCellVideoIdle(d, v);
+			else
+				PaintPreviewCellStreamNg(d, v);
+		}
+	}
+}
+
+void CDtSampleDlg::PaintPreviewCellsPostPowerStream()
+{
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
+	{
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
+		{
+			if (!IsPreviewChannelOn(d, v))
+			{
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
+				continue;
+			}
+			PaintPreviewCellStreamingWait(d, v);
+		}
+	}
+}
+
+void CDtSampleDlg::PaintPreviewCellsPostPowerStreamState()
+{
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
+	{
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
+		{
+			if (!IsPreviewChannelOn(d, v))
+			{
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
+				continue;
+			}
+			if (IsPreviewCellStreamingLive(d, v))
+				continue;
+			if (m_bPreviewStreamSettleDone)
+				PaintPreviewCellNoSignal(d, v);
+			else
+				PaintPreviewCellStreamingWait(d, v);
+		}
+	}
+}
+
+void CDtSampleDlg::PaintPreviewCellsIdle()
+{
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
+	{
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
+		{
+			if (!IsPreviewChannelOn(d, v))
+			{
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
+			}
+			else
+				PaintPreviewCellVideoIdle(d, v);
 		}
 	}
 }
 
 void CDtSampleDlg::PaintPreviewCellsTestResult()
 {
-	for (int d = 0; d < 8; d++)
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
 	{
-		for (int v = 0; v < 4; v++)
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
 		{
 			if (!IsPreviewChannelOn(d, v))
 			{
-				PaintPreviewCellOff(d, v);
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
 				continue;
 			}
 			if (m_dtFunction.m_bLightGateHasResult)
@@ -1248,10 +1857,7 @@ void CDtSampleDlg::PaintPreviewCellsTestResult()
 			else if (m_dtFunction.m_bFirmwareBurnHasResult && m_dtFunction.m_bFirmwareBurnPass[d][v])
 				PaintPreviewCellBurnOk(d, v);
 			else if (m_dtFunction.m_bFirmwareBurnHasResult)
-			{
-				m_dtFunction.SetFirmwareBurnPercent(d, v, 100);
-				PaintPreviewCellFirmware(d, v);
-			}
+				PaintPreviewCellBurnNg(d, v);
 			else
 				PaintPreviewCellOff(d, v);
 		}
@@ -1261,12 +1867,25 @@ void CDtSampleDlg::PaintPreviewCellsTestResult()
 void CDtSampleDlg::ResetFwBurnCellOverlay()
 {
 	m_dtFunction.ResetFirmwareBurnUiForEnabledChannels();
-	for (int d = 0; d < 8; d++)
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
 	{
-		for (int v = 0; v < 4; v++)
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
 		{
 			if (!IsPreviewChannelOn(d, v))
-				PaintPreviewCellOff(d, v);
+			{
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
+			}
 		}
 	}
 	for (int d = 0; d < m_dtFunction.m_iEnumDevNum; d++)
@@ -1290,7 +1909,7 @@ void CDtSampleDlg::PaintPreviewCellFirmware(int dev, int vc)
 	if (pct < 0)
 		return;
 
-	CWnd* pWnd = GetDlgItem(m_uWndCtrlID[dev][vc]);
+	CWnd* pWnd = GetPreviewWndForGlobalDev(dev, vc);
 	if (pWnd == NULL || pWnd->GetSafeHwnd() == NULL)
 		return;
 
@@ -1300,17 +1919,12 @@ void CDtSampleDlg::PaintPreviewCellFirmware(int dev, int vc)
 	if (rFull.IsRectEmpty())
 		return;
 
-	/* Do not show NG while burn threads still running (progress may hit 100% first). */
-	const bool burnFail = (pct >= 100 && m_dtFunction.m_bFirmwareBurnHasResult
-		&& !m_dtFunction.m_bFirmwareBurnInProgress
-		&& !m_dtFunction.m_bFirmwareBurnPass[dev][vc]);
-	const bool burnOk = (pct >= 100 && m_dtFunction.m_bFirmwareBurnHasResult
-		&& !m_dtFunction.m_bFirmwareBurnInProgress
-		&& m_dtFunction.m_bFirmwareBurnPass[dev][vc]);
-
-	if (burnOk)
+	if (pct >= 100 && m_dtFunction.m_bFirmwareBurnHasResult)
 	{
-		PaintPreviewCellBurnOk(dev, vc);
+		if (m_dtFunction.m_bFirmwareBurnPass[dev][vc])
+			PaintPreviewCellBurnOk(dev, vc);
+		else
+			PaintPreviewCellBurnNg(dev, vc);
 		return;
 	}
 
@@ -1324,13 +1938,6 @@ void CDtSampleDlg::PaintPreviewCellFirmware(int dev, int vc)
 	COLORREF fg = PreviewCellUi::kBurnFg;
 	COLORREF barFill = PreviewCellUi::kBurnBarFill;
 	COLORREF barTrack = PreviewCellUi::kBurnBarTrack;
-	if (burnFail)
-	{
-		bg = PreviewCellUi::kBurnNgBg;
-		fg = PreviewCellUi::kBurnNgFg;
-		barFill = PreviewCellUi::kBurnNgBarFill;
-		barTrack = PreviewCellUi::kBurnNgBarTrack;
-	}
 
 	/* Full fill clears carDrawImage / burn text residue. */
 	dc.FillSolidRect(&rFull, bg);
@@ -1358,10 +1965,7 @@ void CDtSampleDlg::PaintPreviewCellFirmware(int dev, int vc)
 	dc.SetTextColor(fg);
 
 	CString tip;
-	if (burnFail)
-		tip.Format(_T("D%d V%d\nBurn NG"), dev, vc);
-	else
-		tip.Format(_T("D%d V%d\nBurn %d%%"), dev, vc, min(pct, 100));
+	tip.Format(_T("D%d V%d\nBurn %d%%"), dev, vc, min(pct, 100));
 
 	CRect rText(rFull.left, rFull.top, rFull.right, rcBar.top - 1);
 	rText.DeflateRect(2, 2);
@@ -1407,8 +2011,13 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 			return;
 		}
 		m_bStart = TRUE;
-		ClearFwBurnCellOverlay();
+		m_bPreviewBurnStickyHold = FALSE;
+		m_bPreviewPostPowerStream = TRUE;
+		m_bPreviewStreamSettleDone = FALSE;
+		ClearFwBurnCellOverlay(false);
+		PaintPreviewCellsPostPowerStream();
 		SetTimer(0, 1000, NULL);
+		StartPreviewStreamRefreshTimer();
 		int settleMs = m_dtFunction.m_specDelayMs;
 		if (settleMs < 200)
 			settleMs = 200;
@@ -1425,6 +2034,11 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
 		if (!m_bStart && !m_dtFunction.m_gateFirmwareBurn.verifyEnabled)
 			return;
+		if (m_bPreviewPostPowerStream)
+		{
+			m_bPreviewStreamSettleDone = TRUE;
+			PaintPreviewCellsPostPowerStreamState();
+		}
 		RunSensorIdAfterStreamIfNeeded();
 		if (!RunFirmwareBurnVerifyOrStop())
 			return;
@@ -1438,6 +2052,7 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 			m_bStart = TRUE;
 			ClearFwBurnCellOverlay();
 			SetTimer(0, 1000, NULL);
+			StartPreviewStreamRefreshTimer();
 			if (m_btnStart.GetSafeHwnd())
 				m_btnStart.SetWindowText(_T("Stop"));
 			else if (GetDlgItem(IDC_BUTTON_START))
@@ -1454,6 +2069,15 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 			}
 			SetTimer(TIMER_ID_STREAM_GATE, postMs, NULL);
 		}
+	}
+	else if (nIDEvent == TIMER_ID_PREVIEW_STREAM)
+	{
+		if (!ShouldShowPreviewStreamState())
+		{
+			StopPreviewStreamRefreshTimer();
+			return;
+		}
+		SchedulePreviewGridRepaint();
 	}
 	else if (nIDEvent == TIMER_ID_STREAM_GATE)
 	{
@@ -1628,12 +2252,19 @@ int CDtSampleDlg::LayoutToolbar(const CRect& rcClient)
 	return y + btnH + 18;
 }
 
-int CDtSampleDlg::ReSize() {
+int CDtSampleDlg::ReSize(bool schedulePreviewRepaint) {
 	CRect rcClient;
 	GetClientRect(&rcClient);
+	const double uiScale = DtGetWindowUiScale(m_hWnd);
+	m_tabFa132.SetUiScale(uiScale);
+	m_fa132Overview.SetUiScale(uiScale);
+	m_mesBar.SetUiScale(uiScale);
 	const int margin = 10;
 	const int topBar = LayoutToolbar(rcClient);
 	m_cyToolbarBottom = topBar;
+	const int fa132Gap = max(4, (int)(6 * uiScale));
+	const int mesGap = fa132Gap;
+	const int mesH = m_mesBar.GetSafeHwnd() ? m_mesBar.PreferredHeight() : 0;
 	const int logGap = 10;
 	const int cw = max(1, rcClient.Width());
 	int logW = MulDiv(cw, 30, 100);
@@ -1661,31 +2292,66 @@ int CDtSampleDlg::ReSize() {
 			rcClient.right - logW - logGap, logTop, logW, logH, TRUE);
 	}
 
-	CRect rcVideo(margin, topBar,
-		rcClient.right - logW - logGap - margin,
-		rcClient.bottom - margin);
-	if (rcVideo.Width() < 32 || rcVideo.Height() < 32)
-		rcVideo.SetRect(margin, topBar, margin + max(32, rcClient.Width() - logW - logGap - 2 * margin), rcClient.bottom - margin);
+	const int videoLeft = margin;
+	const int videoRight = rcClient.right - logW - logGap - margin;
 
-	/* Always show 8 Dev x 4 VC = 32 preview cells (channel mask only affects Open/Start/draw). */
-	const int nCamCnt = 32;
-	for (int dev = 0; dev < 8; dev++)
+	const int mesTop = topBar;
+	const int fa132Top = topBar + mesH + (mesH > 0 ? mesGap : 0);
+	if (m_mesBar.GetSafeHwnd())
 	{
-		for (int vc = 0; vc < 4; vc++)
+		m_mesBar.MoveWindow(videoLeft, mesTop, max(32, videoRight - videoLeft), mesH, TRUE);
+		m_mesBar.LayoutChildren();
+	}
+
+	const int tabStripW = max(32, videoRight - videoLeft);
+	int tabRowH = m_tabFa132.GetSafeHwnd()
+		? m_tabFa132.MeasureStripHeight(tabStripW)
+		: max(36, (int)(38 * uiScale));
+	if (m_tabFa132.GetSafeHwnd())
+		m_tabFa132.MoveWindow(videoLeft, fa132Top, tabStripW, tabRowH, TRUE);
+
+	const int overviewH = m_fa132Overview.GetSafeHwnd()
+		? m_fa132Overview.PreferredBarHeight()
+		: max(36, (int)(38 * uiScale));
+	const int overviewTop = fa132Top + tabRowH + fa132Gap;
+	if (m_fa132Overview.GetSafeHwnd())
+		m_fa132Overview.MoveWindow(videoLeft, overviewTop, tabStripW, overviewH, TRUE);
+
+	const int videoTop = overviewTop + overviewH + fa132Gap;
+	const int videoBottom = rcClient.bottom - margin;
+
+	CRect rcVideo(videoLeft, videoTop, videoRight, videoBottom);
+	if (rcVideo.Width() < 32 || rcVideo.Height() < 32)
+		rcVideo.SetRect(videoLeft, videoTop, videoLeft + max(32, videoRight - videoLeft), videoBottom);
+
+	ClearAllPreviewVideoBindings();
+	const int globalDevBase = ActiveFa132TabBaseDev();
+	/* 32 preview cells on active FA132 tab (8 Dev x 4 VC). */
+	const int nCamCnt = 32;
+	for (int dev = 0; dev < MAX_DEV; dev++)
+	{
+		for (int vc = 0; vc < MAX_VC; vc++)
 		{
 			UINT vid = m_uWndCtrlID[dev][vc];
 			CWnd* pV = GetDlgItem(vid);
 			if (pV == NULL)
 				continue;
-			const int layoutIdx = dev * 4 + vc;
-			ChangeModuleSize(layoutIdx, nCamCnt, rcVideo, vid);
-			pV->ShowWindow(SW_SHOW);
+			const int layoutIdx = dev * MAX_VC + vc;
+			ChangeModuleSize(layoutIdx, nCamCnt, rcVideo, vid, globalDevBase);
+			if (pV->GetSafeHwnd() != NULL)
+			{
+				ApplyPreviewCellWindowStyle(pV, vid);
+				pV->ShowWindow(SW_SHOW);
+			}
 		}
 	}
+	UpdateFa132OverviewOnly();
+	if (schedulePreviewRepaint)
+		SchedulePreviewGridRepaint();
 	return 1;
 }
 
-void CDtSampleDlg::ChangeModuleSize(int nID, int nCamCnt, CRect rect, UINT VideoWinID)
+void CDtSampleDlg::ChangeModuleSize(int nID, int nCamCnt, CRect rect, UINT VideoWinID, int globalDevBase)
 {
 	if (rect.Width() < 1 || rect.Height() < 1)
 		return;
@@ -1782,12 +2448,20 @@ void CDtSampleDlg::ChangeModuleSize(int nID, int nCamCnt, CRect rect, UINT Video
 				rect.left + cellW * Temp_x + gap,
 				rect.top + cellH * Temp_y + gap,
 				cw, ch, TRUE);
-			const int idx = (int)VideoWinID - 2000;
-			if (idx >= 0 && idx < 32)
+			CRect rcCell;
+			pV->GetClientRect(&rcCell);
+			if (rcCell.Width() > 0 && rcCell.Height() > 0)
 			{
-				const int dev = idx / 4;
-				const int vc = idx % 4;
-				m_dtFunction.SetVideoCellLayout(dev, vc, pV->GetSafeHwnd(),
+				cw = rcCell.Width();
+				ch = rcCell.Height();
+			}
+			const int idx = (int)VideoWinID - 2000;
+			if (idx >= 0 && idx < MAX_DEV * MAX_VC)
+			{
+				const int localDev = idx / MAX_VC;
+				const int vc = idx % MAX_VC;
+				const int globalDev = globalDevBase + localDev;
+				m_dtFunction.SetVideoCellLayout(globalDev, vc, pV->GetSafeHwnd(),
 					(unsigned short)cw, (unsigned short)ch);
 			}
 		}

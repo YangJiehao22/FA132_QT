@@ -511,7 +511,6 @@ bool Sony031FlashProgram(
 		return false;
 	}
 
-	FirmwareBurnReportProgress(devId, vcId, 100);
 	outResult->success = true;
 	outResult->errorCode = 0;
 	msgUtf8(DtZh::kFwOk, devId, vcId);

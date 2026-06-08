@@ -224,6 +224,8 @@ if exist "$(ProjectDir)GateSpec.template.utf8" copy /Y "$(ProjectDir)GateSpec.te
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DtDpiUi.h" />
+    <ClInclude Include="DtFa132UiBar.h" />
+    <ClInclude Include="DtMesBar.h" />
     <ClInclude Include="DtEncoding.h" />
     <ClInclude Include="DtZhUtf8.h" />
     <ClInclude Include="DtBadPixelDetect.h" />
@@ -243,6 +245,8 @@ if exist "$(ProjectDir)GateSpec.template.utf8" copy /Y "$(ProjectDir)GateSpec.te
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DtDpiUi.cpp" />
+    <ClCompile Include="DtFa132UiBar.cpp" />
+    <ClCompile Include="DtMesBar.cpp" />
     <ClCompile Include="DtEncoding.cpp" />
     <ClCompile Include="DtBadPixelDetect.cpp" />
     <ClCompile Include="DtHotPixelAlgo.cpp" />

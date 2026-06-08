@@ -233,6 +233,18 @@
 #define IDC_VIDEO29                     2029
 #define IDC_VIDEO30                     2030
 #define IDC_VIDEO31                     2031
+#define IDC_TAB_FA132                   2217
+#define IDC_STATIC_FA132_OVERVIEW       2218
+#define IDC_MES_BAR                     2219
+#define IDC_MES_WORK_ORDER              2220
+#define IDC_MES_BOARD0                  2221
+#define IDC_MES_BOARD1                  2222
+#define IDC_MES_BOARD2                  2223
+#define IDC_MES_BOARD3                  2224
+#define IDC_MES_BOUND_LABEL             2225
+#define IDC_MES_LBL_WORK_ORDER          2226
+#define IDC_MES_WO_LOCK                 2227
+#define IDC_MES_WO_LOCKED               2228
 #define ID_DEVICE_INTERNALSTATUS        32771
 #define ID_DEVICE_START                 32772
 #define ID_DEVICE_STOP                  32773
@@ -248,7 +260,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        137
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         2217
+#define _APS_NEXT_CONTROL_VALUE         2229
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
