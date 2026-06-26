@@ -145,9 +145,88 @@ GrabIniAfterPowerCycle={{FW_GRAB_INI_AFTER_PC}}
 ; PowerCycleAfter：=1 且 Enabled=1 烧录后断电上电再校验；仅校验时不断电
 PowerCycleAfter={{FW_POWER_CYCLE}}
 
+[aging_test]
+; 总开关：=0 时与未加老化功能前完全一致（不连温箱、不采样）
+Enabled={{AGING_EN}}
+; =1：Start 时并行设温+启动温箱；=0：光测后再加热（一般不推荐）
+HeatAtStart={{AGING_HEAT_START}}
+
+[oven]
+; 温箱 Modbus TCP（U/D 为同一控制器双腔体，共用 IP/Port/UnitId）
+Enabled={{OVEN_EN}}
+Profile={{OVEN_PROFILE}}
+Host={{OVEN_HOST}}
+Port={{OVEN_PORT}}
+UnitId={{OVEN_UNIT}}
+TempScale={{OVEN_TEMP_SCALE}}
+TargetC={{OVEN_TARGET}}
+ReadyToleranceC={{OVEN_TOL}}
+WaitTimeoutMin={{OVEN_WAIT_MIN}}
+PollIntervalMs={{OVEN_POLL_MS}}
+ConnectTimeoutMs={{OVEN_CONN_MS}}
+IoTimeoutMs={{OVEN_IO_MS}}
+RetryCount={{OVEN_RETRY}}
+DualChamber={{OVEN_DUAL}}
+HeatMode={{OVEN_HEAT_MODE}}
+CooldownEnabled={{OVEN_COOLDOWN_EN}}
+CooldownTargetC={{OVEN_COOLDOWN_TARGET}}
+CooldownToleranceC={{OVEN_COOLDOWN_TOL}}
+CooldownTimeoutMin={{OVEN_COOLDOWN_TIMEOUT}}
+; U 腔寄存器（Profile 非 Custom 时自动填充）
+RegUSetTemp={{OVEN_REG_U_SET}}
+RegUStart={{OVEN_REG_U_START}}
+RegUStop={{OVEN_REG_U_STOP}}
+RegUPv={{OVEN_REG_U_PV}}
+RegURunState={{OVEN_REG_U_RUN}}
+RegURunBit={{OVEN_REG_U_RUN_BIT}}
+RegUFault={{OVEN_REG_U_FAULT}}
+; D 腔寄存器（S1200：Start=30 Stop=31 Run=32 Fault=33 SetTemp=34 SV=35 PV=36）
+RegDSetTemp={{OVEN_REG_D_SET}}
+RegDStart={{OVEN_REG_D_START}}
+RegDStop={{OVEN_REG_D_STOP}}
+RegDPv={{OVEN_REG_D_PV}}
+RegDRunState={{OVEN_REG_D_RUN}}
+RegDRunBit={{OVEN_REG_D_RUN_BIT}}
+RegDFault={{OVEN_REG_D_FAULT}}
+
+[aging_gate]
+; 老化时长(分钟)、采样间隔(秒)
+DurationMin={{AGING_DUR_MIN}}
+SampleIntervalSec={{AGING_SAMPLE_SEC}}
+; 老化判定门限（可与 [limits] 不同；留空则读取时继承 [limits]）
+MinSsrFps={{AGING_MIN_SSR}}
+MaxSsrFps={{AGING_MAX_SSR}}
+MinCurrent_mA={{AGING_MIN_CUR}}
+MaxCurrent_mA={{AGING_MAX_CUR}}
+MinSensorTemp_C={{AGING_MIN_TEMP}}
+MaxSensorTemp_C={{AGING_MAX_TEMP}}
+; 三路工作电压门限(V)，需 [aging_voltage_i2c] Enabled=1 才参与判定
+MinAvdd_V={{AGING_MIN_AVDD}}
+MaxAvdd_V={{AGING_MAX_AVDD}}
+MinIovdd_V={{AGING_MIN_IOVDD}}
+MaxIovdd_V={{AGING_MAX_IOVDD}}
+MinDvdd_V={{AGING_MIN_DVDD}}
+MaxDvdd_V={{AGING_MAX_DVDD}}
+
+[aging_voltage_i2c]
+; 老化采样：AVDD/IOVDD/DVDD（从机地址用 [sensor_temp_i2c_vc] D#_V#）
+; Fa132DualChip=1 时按 Chip0/Chip1 分阶段并行读（与 [firmware_burn] 校验/SensorID 一致）
+; I2cMode=3：每路读低/高字节，raw16 = Lo + Hi*256（先低后高），mV = raw16 * 1000 / Scale
+Enabled={{AGING_VOLT_EN}}
+I2cMode={{AGING_VOLT_MODE}}
+RegAvdd={{AGING_REG_AVDD}}
+RegAvddHigh={{AGING_REG_AVDD_H}}
+RegIovdd={{AGING_REG_IOVDD}}
+RegIovddHigh={{AGING_REG_IOVDD_H}}
+RegDvdd={{AGING_REG_DVDD}}
+RegDvddHigh={{AGING_REG_DVDD_H}}
+Scale={{AGING_VOLT_SCALE}}
+
 [tcp_notify]
 ; TCP Client: after all VC tests + Production_report.csv, one Play cmd {"Order":"Play","SNList":[]}\n
 Enabled={{TCP_EN}}
+; CloseBoxAfterTest=1 且 Enabled=1：Stop 后 Close 测试盒再 Play；两开关缺一则不自动 Close
+CloseBoxAfterTest={{TCP_CLOSE_BOX}}
 PeerHost={{TCP_HOST}}
 PeerPort={{TCP_PORT}}
 ; OnlyOnOverallOk=1: send only when overall PASS

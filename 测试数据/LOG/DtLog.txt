@@ -4424,3 +4424,331 @@
 [2026-06-08 13:19:00,801][22712][DEBUG] - Enumerate OK, DeviceNum:0
 [2026-06-08 13:19:00,801][22712][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
 [2026-06-08 13:19:05,479][22712][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-08 14:24:58,842][27608][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-08 14:24:58,850][27608][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-08 14:24:58,850][27608][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-08 14:25:01,814][27608][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-08 14:30:20,024][27168][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-08 14:30:20,033][27168][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-08 14:30:20,033][27168][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-08 14:30:23,212][27168][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-08 14:30:33,533][7244][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-08 14:30:33,541][7244][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-08 14:30:33,541][7244][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-08 14:30:35,744][7244][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-09 11:28:57,773][31652][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-09 11:28:57,915][31652][DEBUG] - Enumerate OK, DeviceNum:1
+[2026-06-09 11:28:57,915][31652][DEBUG] - DeviceName[0]:UC980#000118#1130026030124#000
+[2026-06-09 11:28:57,915][31652][DEBUG] - DevID:1 SetDeviceType UC
+[2026-06-09 11:28:57,915][31652][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:1
+[2026-06-09 11:29:03,101][31652][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-09 13:24:41,602][49796][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-09 13:24:41,610][49796][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-09 13:24:41,610][49796][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-09 13:24:50,325][49796][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-09 13:59:42,495][32628][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-09 13:59:42,503][32628][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-09 13:59:42,504][32628][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-09 13:59:44,845][32628][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-09 16:01:25,719][45408][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-09 16:01:25,726][45408][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-09 16:01:25,726][45408][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-09 16:01:30,427][45408][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-09 16:03:01,485][42880][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-09 16:03:01,493][42880][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-09 16:03:01,493][42880][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-09 16:03:05,065][42880][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 08:43:15,067][5668][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 08:43:15,133][5668][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 08:43:15,133][5668][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 08:43:18,990][5668][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 08:45:35,894][26016][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 08:45:35,907][26016][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 08:45:35,907][26016][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 08:45:38,988][26016][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 11:37:03,358][6384][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 11:37:03,368][6384][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 11:37:03,368][6384][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 13:07:08,915][6384][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 13:45:49,679][29628][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 13:45:49,691][29628][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 13:45:49,691][29628][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 13:46:28,666][29628][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 13:48:34,943][5044][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 13:48:34,952][5044][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 13:48:34,952][5044][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 13:49:30,878][5044][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 13:52:15,010][26560][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 13:52:15,022][26560][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 13:52:15,022][26560][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 13:54:36,768][26560][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 13:55:33,968][22692][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 13:55:33,977][22692][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 13:55:33,977][22692][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 13:55:42,517][22692][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 13:58:40,572][17244][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 13:58:40,580][17244][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 13:58:40,580][17244][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 13:58:58,256][17244][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:02:48,929][14408][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:02:48,938][14408][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:02:48,938][14408][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:09:12,575][14408][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:09:25,263][4588][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:09:25,273][4588][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:09:25,273][4588][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:10:11,964][4588][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:10:37,994][7900][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:10:38,003][7900][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:10:38,003][7900][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:11:03,024][7900][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:13:12,160][2012][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:13:12,169][2012][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:13:12,169][2012][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:17:21,127][2012][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:17:32,949][28172][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:17:32,959][28172][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:17:32,959][28172][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:18:11,644][28172][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:18:14,850][10576][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:18:14,861][10576][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:18:14,861][10576][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:18:19,642][10576][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:25:21,789][15428][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:25:21,799][15428][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:25:21,799][15428][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:25:54,654][15428][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:40:10,270][15428][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:40:10,277][15428][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:40:10,277][15428][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:40:40,304][15428][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:41:03,282][20540][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:41:03,290][20540][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:41:03,290][20540][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:41:23,893][20540][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:45:03,294][28468][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:45:03,304][28468][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:45:03,304][28468][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:47:36,860][28468][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:50:53,984][14000][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:50:53,993][14000][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:50:53,993][14000][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:51:38,560][14000][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 14:54:04,000][28572][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 14:54:04,010][28572][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 14:54:04,010][28572][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 14:54:34,351][28572][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 15:30:48,547][28136][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 15:30:48,555][28136][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 15:30:48,555][28136][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 15:31:43,500][28136][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 15:36:01,030][3844][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 15:36:01,040][3844][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 15:36:01,040][3844][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 15:36:03,052][3844][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 16:06:59,160][21680][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 16:06:59,178][21680][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 16:06:59,178][21680][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 16:07:12,214][21680][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 16:09:53,649][5876][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 16:09:53,658][5876][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 16:09:53,658][5876][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 16:10:06,409][5876][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 16:42:23,469][8988][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 16:42:23,479][8988][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 16:42:23,479][8988][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 16:42:31,223][8988][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-10 16:45:22,399][17044][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-10 16:45:22,407][17044][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-10 16:45:22,407][17044][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-10 16:45:25,989][17044][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 09:21:50,326][7804][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 09:21:50,334][7804][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 09:21:50,334][7804][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 09:22:22,527][7804][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 09:24:06,364][27780][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 09:24:06,372][27780][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 09:24:06,372][27780][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 09:46:28,911][27780][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 09:46:43,164][10308][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 09:46:43,173][10308][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 09:46:43,173][10308][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 09:47:04,305][10308][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 11:08:29,120][25216][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 11:08:29,133][25216][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 11:08:29,133][25216][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 11:09:36,119][25216][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 11:27:04,289][12040][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 11:27:04,300][12040][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 11:27:04,300][12040][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 11:28:01,652][12040][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 11:31:38,510][4996][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 11:31:38,518][4996][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 11:31:38,518][4996][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 11:32:39,428][4996][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 13:26:26,861][29920][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 13:26:26,869][29920][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 13:26:26,869][29920][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 13:26:45,561][29920][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 13:37:06,502][3504][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 13:37:06,509][3504][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 13:37:06,509][3504][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 13:48:10,871][3504][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 14:12:43,226][8036][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 14:12:43,235][8036][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 14:12:43,235][8036][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 14:39:49,910][30496][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 14:39:49,919][30496][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 14:39:49,919][30496][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 14:40:09,933][30496][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 14:42:08,261][26264][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 14:42:08,271][26264][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 14:42:08,271][26264][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 14:42:56,376][26264][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 14:47:03,249][25508][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 14:47:03,257][25508][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 14:47:03,257][25508][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 15:18:43,351][25508][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 15:35:02,026][29880][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 15:35:02,036][29880][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 15:35:02,036][29880][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 15:35:50,476][29880][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-11 15:39:49,700][24476][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-11 15:39:49,708][24476][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-11 15:39:49,708][24476][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-11 15:40:20,858][24476][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 14:49:39,627][2580][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 14:49:39,637][2580][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 14:49:39,637][2580][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 14:49:51,199][2580][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 15:03:21,733][27380][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 15:03:21,741][27380][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 15:03:21,741][27380][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 15:03:38,651][27380][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 15:04:01,912][6652][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 15:04:01,920][6652][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 15:04:01,921][6652][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 15:11:23,812][6652][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 15:16:32,645][31200][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 15:16:32,653][31200][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 15:16:32,654][31200][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 15:16:49,360][31200][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 15:53:40,290][26436][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 15:53:40,298][26436][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 15:53:40,298][26436][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 15:54:04,141][26436][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 15:56:31,849][12424][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 15:56:31,859][12424][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 15:56:31,860][12424][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 15:56:54,131][12424][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 15:58:40,814][31500][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 15:58:40,823][31500][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 15:58:40,823][31500][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 15:59:11,750][31500][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 16:17:46,691][3268][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 16:17:46,700][3268][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 16:17:46,700][3268][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 16:18:20,145][3268][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-12 16:54:55,724][29716][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-12 16:54:55,734][29716][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-12 16:54:55,734][29716][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-12 16:55:21,935][29716][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 09:01:11,602][24336][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 09:01:11,611][24336][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 09:01:11,611][24336][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 09:01:15,029][24336][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 09:31:45,910][11664][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 09:31:45,921][11664][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 09:31:45,921][11664][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 09:32:36,769][11664][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 10:09:04,977][25196][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 10:09:04,985][25196][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 10:09:04,985][25196][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 10:09:40,970][25196][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 10:18:57,324][856][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 10:18:57,333][856][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 10:18:57,333][856][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 10:19:00,689][856][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 10:57:32,408][15372][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 10:57:32,416][15372][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 10:57:32,416][15372][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 10:57:48,002][15372][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 11:12:39,750][13624][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 11:12:39,757][13624][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 11:12:39,757][13624][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 11:12:47,767][13624][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 13:36:05,647][18704][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 13:36:05,655][18704][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 13:36:05,655][18704][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 13:36:07,825][18704][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 13:40:41,234][24656][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 13:40:41,241][24656][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 13:40:41,241][24656][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 13:40:44,155][24656][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 14:06:16,606][24896][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 14:06:16,614][24896][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 14:06:16,614][24896][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 14:06:18,878][24896][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 14:11:59,246][11644][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 14:11:59,254][11644][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 14:11:59,254][11644][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 14:12:00,797][11644][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 14:12:19,943][10768][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 14:12:19,950][10768][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 14:12:19,950][10768][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 14:12:21,599][10768][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-15 16:03:04,242][20416][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-15 16:03:04,250][20416][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-15 16:03:04,250][20416][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-15 16:03:06,674][20416][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-16 09:59:53,965][26664][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-16 09:59:53,974][26664][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-16 09:59:53,974][26664][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-16 10:00:05,354][26664][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-16 10:39:02,390][21424][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-16 10:39:02,398][21424][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-16 10:39:02,398][21424][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-16 10:39:04,571][21424][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-17 10:44:30,213][31320][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-17 10:44:30,222][31320][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-17 10:44:30,222][31320][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-17 10:44:32,317][31320][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-17 15:47:16,597][25212][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-17 15:47:16,605][25212][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-17 15:47:16,605][25212][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-17 15:47:29,811][25212][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-17 16:03:27,983][17280][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-17 16:03:27,990][17280][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-17 16:03:27,990][17280][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-17 16:09:25,147][17280][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-17 16:09:40,683][22068][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-17 16:09:40,692][22068][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-17 16:09:40,692][22068][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-17 16:10:01,207][22068][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-17 16:21:06,234][11896][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-17 16:21:06,242][11896][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-17 16:21:06,242][11896][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-17 16:21:07,982][11896][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-18 09:26:58,741][3312][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-18 09:26:58,751][3312][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-18 09:26:58,751][3312][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-18 09:27:04,855][3312][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-18 09:40:36,465][6532][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-18 09:40:36,477][6532][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-18 09:40:36,477][6532][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-22 09:05:39,320][2052][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-22 09:05:39,331][2052][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-22 09:05:39,331][2052][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-22 09:05:44,336][2052][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-25 09:22:01,876][31592][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-25 09:22:01,884][31592][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-25 09:22:01,884][31592][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-25 09:22:07,114][31592][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-26 10:17:56,110][43356][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-26 10:17:56,118][43356][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-26 10:17:56,118][43356][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-26 10:17:58,851][43356][DEBUG] - DllMain DLL_PROCESS_DETACH
+[2026-06-26 14:20:41,822][20796][DEBUG] - carEnumerateDevice Enter, iDeviceNumMax:32
+[2026-06-26 14:20:41,829][20796][DEBUG] - Enumerate OK, DeviceNum:0
+[2026-06-26 14:20:41,829][20796][DEBUG] - carEnumerateDevice Exit, iRet:1, DeviceNum:0
+[2026-06-26 14:20:44,995][20796][DEBUG] - DllMain DLL_PROCESS_DETACH

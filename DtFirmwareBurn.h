@@ -45,7 +45,7 @@ struct Sony031VerifyResult
 	int failIndex;
 	unsigned short expected;
 	unsigned short actual;
-	unsigned short values[14];
+	unsigned short values[15];
 };
 
 struct Sony031BurnResult
@@ -75,6 +75,12 @@ bool FirmwareBurnSetupDevI2c(int devId, const GateFirmwareBurnCfg& cfg);
 /** FA132 dual-chip: 0 = first 96718 (VC < split), 1 = second. */
 int FirmwareChipIdForVc(int vcId, const GateFirmwareBurnCfg& cfg);
 
+/** FA132 dual-chip parallel I2C: 1 or 2 chip phases (same as burn/verify/SensorID). */
+int FirmwareChipPhaseCount(const GateFirmwareBurnCfg& cfg);
+
+/** True if vcId belongs to chipPhase when Fa132DualChip; else only chipPhase==0. */
+bool VcOnFirmwareChipPhase(int vcId, int chipPhase, const GateFirmwareBurnCfg& cfg);
+
 /** FA132: carSetChipID + optional SetMipiImageVC for the given VC lane. */
 bool FirmwareSelectVcLane(int devId, int vcId, const GateFirmwareBurnCfg& cfg);
 
@@ -88,9 +94,10 @@ bool Sony031ReadSensorId(
 	int vcId,
 	const GateFirmwareBurnCfg& cfg,
 	unsigned char slaveHint,
-	Sony031SensorIdResult* outResult);
+	Sony031SensorIdResult* outResult,
+	bool logOk = false);
 
-/** Sony ISX031 512KB flash program (Ruibo Sony031WriteFlash core). */
+/** Sony ISX031 512KB flash program (Ruibo Sony031WriteFlash; unprotect verify 0x60D9). */
 bool Sony031FlashProgram(
 	int devId,
 	int vcId,

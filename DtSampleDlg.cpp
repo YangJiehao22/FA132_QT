@@ -4,6 +4,8 @@
 #include "DtSpecDlg.h"
 #include "DtEncoding.h"
 #include "DtZhUtf8.h"
+#include "DtOvenModbus.h"
+#include "DtAgingGate.h"
 #include "DtDpiUi.h"
 #include "afxdialogex.h"
 
@@ -23,6 +25,15 @@
 #endif
 #ifndef TIMER_ID_PREVIEW_STREAM
 #define TIMER_ID_PREVIEW_STREAM 5
+#endif
+#ifndef TIMER_ID_OVEN_WAIT
+#define TIMER_ID_OVEN_WAIT 6
+#endif
+#ifndef TIMER_ID_AGING_SAMPLE
+#define TIMER_ID_AGING_SAMPLE 7
+#endif
+#ifndef TIMER_ID_OVEN_COOLDOWN
+#define TIMER_ID_OVEN_COOLDOWN 8
 #endif
 
 struct DtFwWorkerParam
@@ -288,6 +299,18 @@ CDtSampleDlg::CDtSampleDlg(CWnd* pParent /*=NULL*/)
 	, m_bLightTestAfterI2cSettle(FALSE)
 	, m_iActiveFa132Tab(0)
 	, m_bPreviewGridRepaintPosted(FALSE)
+	, m_bAgingFlowActive(FALSE)
+	, m_bCooldownActive(FALSE)
+	, m_bOvenHeatInvolved(FALSE)
+	, m_bAgingDataFinalized(FALSE)
+	, m_agingElapsedSec(0)
+	, m_agingWaitStartTick(0)
+	, m_agingMonitorStartTick(0)
+	, m_agingCooldownStartTick(0)
+	, m_bAgingFinalAllPass(FALSE)
+	, m_bCooldownLogStarted(FALSE)
+	, m_lastCooldownLogTick(0)
+	, m_lastAgingProgressLogMin(-1)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
@@ -563,7 +586,8 @@ LRESULT CDtSampleDlg::OnDtCarDraw(WPARAM wP, LPARAM lP)
 		return DT_ERROR_FAILED;
 
 	if (m_bPreviewFrozen || m_bPreviewBurnStickyHold
-		|| m_dtFunction.IsFirmwareBurnCellActive(p->devId, p->vcId))
+		|| m_dtFunction.IsFirmwareBurnCellActive(p->devId, p->vcId)
+		|| m_dtFunction.IsAgingNgCell(p->devId, p->vcId))
 		return DT_ERROR_OK;
 	if (!IsGlobalDevOnActiveTab(p->devId))
 		return DT_ERROR_OK;
@@ -708,6 +732,13 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 		KillTimer(TIMER_ID_FW_POWER_SETTLE);
 		KillTimer(TIMER_ID_FW_POWER_OFF);
 		KillTimer(TIMER_ID_STREAM_GATE);
+		KillTimer(TIMER_ID_OVEN_WAIT);
+		KillTimer(TIMER_ID_AGING_SAMPLE);
+		KillTimer(TIMER_ID_OVEN_COOLDOWN);
+		m_bAgingFlowActive = FALSE;
+		m_bCooldownActive = FALSE;
+		m_bOvenHeatInvolved = FALSE;
+		m_bAgingDataFinalized = FALSE;
 		StopPreviewStreamRefreshTimer();
 		if (fwBurn)
 		{
@@ -717,6 +748,7 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 			m_bStart = TRUE;
 			m_dtFunction.LogProductionRunStart();
 			SetTimer(0, 1000, NULL);
+			BeginOvenHeatIfNeeded();
 		}
 		else if (!m_dtFunction.Start())
 		{
@@ -728,11 +760,28 @@ void CDtSampleDlg::OnBnClickedButtonStart()
 			m_dtFunction.LogProductionRunStart();
 			SetTimer(0, 1000, NULL);
 			StartPreviewStreamRefreshTimer();
+			BeginOvenHeatIfNeeded();
 			ScheduleFirmwareVerifyThenLightTest();
 		}
 	}
 	else {
-		StopCaptureAndShowResults(m_bFwPowerCyclePending != FALSE);
+		m_dtFunction.ReadGateSpecIni();
+		const bool agingEn = m_dtFunction.m_gateAgingTest.enabled;
+		if (m_bCooldownActive)
+		{
+			KillTimer(TIMER_ID_OVEN_COOLDOWN);
+			if (agingEn && m_bOvenHeatInvolved && m_dtFunction.m_gateOven.enabled)
+				OvenStopOnly(m_dtFunction.m_gateOven);
+			CompleteAgingRunUi();
+		}
+		else if (agingEn && (m_bAgingFlowActive || m_bOvenHeatInvolved))
+		{
+			BeginOvenCooldownAfterAging(true);
+		}
+		else
+		{
+			StopCaptureAndShowResults(m_bFwPowerCyclePending != FALSE);
+		}
 	}
 update_start_btn:
 	if (m_btnStart.GetSafeHwnd())
@@ -993,6 +1042,303 @@ void CDtSampleDlg::StopCaptureForFirmwarePowerCycle()
 	}
 	m_bPreviewBurnStickyHold = TRUE;
 	PaintPreviewCellsBurnSticky();
+}
+
+void CDtSampleDlg::ReleaseTestBoxAndNotifyPeer(bool allPass)
+{
+	m_dtFunction.ReadGateSpecIni();
+	const GateTcpNotifyCfg& tcp = m_dtFunction.m_gateTcpNotify;
+	if (tcp.enabled && tcp.closeBoxAfterTest && m_bOpen)
+	{
+		msgUtf8(DtZh::kTcpNotifyCloseBox);
+		m_dtFunction.Close();
+		m_bOpen = FALSE;
+		if (m_btnOpen.GetSafeHwnd())
+			m_btnOpen.SetWindowText(_T("Open"));
+		else if (GetDlgItem(IDC_BUTTON_OPEN))
+			GetDlgItem(IDC_BUTTON_OPEN)->SetWindowText(_T("Open"));
+		UpdatePrimaryButtonLooks();
+	}
+	if (tcp.enabled)
+		TcpNotifyPostTestDoneAsync(tcp, allPass);
+}
+
+unsigned __stdcall CDtSampleDlg::OvenHeatWorkerProc(void* param)
+{
+	CDtSampleDlg* dlg = (CDtSampleDlg*)param;
+	if (dlg == NULL)
+		return 1;
+	dlg->m_dtFunction.ReadGateSpecIni();
+	const GateOvenCfg& ov = dlg->m_dtFunction.m_gateOven;
+	const bool ok = ov.enabled && OvenHeatStart(ov);
+	dlg->m_bOvenHeatInvolved = ok ? TRUE : FALSE;
+	return ok ? 0 : 1;
+}
+
+void CDtSampleDlg::BeginOvenHeatIfNeeded()
+{
+	m_dtFunction.ReadGateSpecIni();
+	if (!m_dtFunction.m_gateAgingTest.enabled || !m_dtFunction.m_gateAgingTest.heatAtStart)
+		return;
+	if (!m_dtFunction.m_gateOven.enabled)
+		return;
+	m_bOvenHeatInvolved = FALSE;
+	HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &CDtSampleDlg::OvenHeatWorkerProc, this, 0, NULL);
+	if (h != NULL)
+		CloseHandle(h);
+}
+
+void CDtSampleDlg::BeginAgingAfterLightTest()
+{
+	m_bAgingFlowActive = TRUE;
+	m_bAgingDataFinalized = FALSE;
+	m_agingElapsedSec = 0;
+	m_agingWaitStartTick = GetTickCount();
+	m_agingMonitorStartTick = 0;
+	m_lastAgingProgressLogMin = -1;
+	SetWindowText(ZH_UTF8(kMainTitleAgingWait));
+	const int poll = m_dtFunction.m_gateOven.pollIntervalMs;
+	SetTimer(TIMER_ID_OVEN_WAIT, (poll > 500) ? poll : 5000, NULL);
+}
+
+bool CDtSampleDlg::ShouldShowAgingMonitor() const
+{
+	return (m_bAgingFlowActive != FALSE)
+		&& m_dtFunction.m_gateAgingTest.enabled
+		&& !m_bPreviewFrozen
+		&& m_agingMonitorStartTick != 0;
+}
+
+void CDtSampleDlg::UpdateAgingProgressTitle()
+{
+	if (!m_bAgingFlowActive || !m_dtFunction.m_gateAgingTest.enabled)
+		return;
+	if (m_agingMonitorStartTick == 0)
+	{
+		SetWindowText(ZH_UTF8(kMainTitleAgingWait));
+		return;
+	}
+	const int durMin = max(1, m_dtFunction.m_gateAgingGate.durationMin);
+	const int elMin = m_agingElapsedSec / 60;
+	const int ng = AgingCountNgCells(&m_dtFunction);
+	CStringA u8;
+	u8.Format(DtZh::kMainTitleAgingProgress, elMin, durMin, ng);
+	SetWindowText(Utf8ToCString(u8));
+}
+
+void CDtSampleDlg::FinalizeAgingProductionData(bool ovenFault)
+{
+	bool finalAllPass = false;
+	if (m_dtFunction.m_bProductionDeferred)
+		finalAllPass = m_dtFunction.FinalizeDeferredProductionWithAging();
+	if (ovenFault)
+		finalAllPass = false;
+	m_bAgingFinalAllPass = finalAllPass;
+}
+
+void CDtSampleDlg::CompleteAgingRunUi()
+{
+	m_bCooldownActive = FALSE;
+	m_bAgingFlowActive = FALSE;
+	m_bAgingDataFinalized = FALSE;
+	m_bOvenHeatInvolved = FALSE;
+	msgUtf8(DtZh::kAgingDone);
+	ReleaseTestBoxAndNotifyPeer(m_bAgingFinalAllPass);
+	if (m_btnStart.GetSafeHwnd())
+		m_btnStart.SetWindowText(_T("Start"));
+	else if (GetDlgItem(IDC_BUTTON_START))
+		GetDlgItem(IDC_BUTTON_START)->SetWindowText(_T("Start"));
+	UpdatePrimaryButtonLooks();
+	if (m_bAgingFinalAllPass)
+		SetWindowText(ZH_UTF8(kMainTitleTestOk));
+	else
+		SetWindowText(ZH_UTF8(kMainTitleTestNg));
+}
+
+void CDtSampleDlg::BeginOvenCooldownAfterAging(bool ovenFault)
+{
+	KillTimer(TIMER_ID_OVEN_WAIT);
+	KillTimer(TIMER_ID_AGING_SAMPLE);
+	m_bAgingFlowActive = FALSE;
+
+	m_dtFunction.ReadGateSpecIni();
+	const GateAgingTestCfg& at = m_dtFunction.m_gateAgingTest;
+	const GateOvenCfg& ov = m_dtFunction.m_gateOven;
+
+	if (!m_bAgingDataFinalized)
+	{
+		FinalizeAgingProductionData(ovenFault);
+		StopCaptureAndShowResults(FALSE);
+		m_bAgingDataFinalized = TRUE;
+	}
+
+	if (!at.enabled || !m_bOvenHeatInvolved || !ov.enabled || !ov.cooldownEnabled)
+	{
+		if (at.enabled && m_bOvenHeatInvolved && ov.enabled)
+			OvenStopOnly(ov);
+		CompleteAgingRunUi();
+		return;
+	}
+
+	m_bCooldownActive = TRUE;
+	m_bCooldownLogStarted = FALSE;
+	m_lastCooldownLogTick = 0;
+	m_agingCooldownStartTick = GetTickCount();
+	SetWindowText(ZH_UTF8(kMainTitleAgingCooldown));
+	msgUtf8(DtZh::kAgingCooldownWait, ov.cooldownTargetC);
+	(void)OvenBeginCooldown(ov);
+	const int poll = (ov.pollIntervalMs > 500) ? ov.pollIntervalMs : 5000;
+	SetTimer(TIMER_ID_OVEN_COOLDOWN, poll, NULL);
+}
+
+void CDtSampleDlg::FinishAgingProductionRun(bool ovenFault)
+{
+	BeginOvenCooldownAfterAging(ovenFault);
+}
+
+void CDtSampleDlg::OnOvenWaitTimer()
+{
+	KillTimer(TIMER_ID_OVEN_WAIT);
+	if (!m_bStart || !m_bAgingFlowActive)
+		return;
+
+	m_dtFunction.ReadGateSpecIni();
+	const GateOvenCfg& ov = m_dtFunction.m_gateOven;
+	const DWORD elapsedMs = GetTickCount() - m_agingWaitStartTick;
+	const DWORD timeoutMs = (DWORD)max(1, ov.waitTimeoutMin) * 60U * 1000U;
+
+	if (!ov.enabled)
+	{
+		m_agingMonitorStartTick = GetTickCount();
+		m_lastAgingProgressLogMin = -1;
+		AgingLogStartSummary(&m_dtFunction);
+		UpdateAgingProgressTitle();
+		SchedulePreviewGridRepaint();
+		const int sampleMs = max(5, m_dtFunction.m_gateAgingGate.sampleIntervalSec) * 1000;
+		SetTimer(TIMER_ID_AGING_SAMPLE, sampleMs, NULL);
+		return;
+	}
+
+	bool ready = false;
+	double pvU = 0.0;
+	double pvD = 0.0;
+	bool fault = false;
+	OvenWaitHeatReadyOnce(ov, &ready, &pvU, &pvD, &fault);
+
+	if (ready && !fault)
+	{
+		if (ov.dualChamber)
+			msgUtf8(DtZh::kAgingOvenReadyDual, pvU, pvD);
+		else
+			msgUtf8(DtZh::kAgingOvenReady, pvU);
+		m_agingMonitorStartTick = GetTickCount();
+		m_lastAgingProgressLogMin = -1;
+		AgingLogStartSummary(&m_dtFunction);
+		UpdateAgingProgressTitle();
+		SchedulePreviewGridRepaint();
+		const int sampleMs = max(5, m_dtFunction.m_gateAgingGate.sampleIntervalSec) * 1000;
+		SetTimer(TIMER_ID_AGING_SAMPLE, sampleMs, NULL);
+		return;
+	}
+
+	if (elapsedMs >= timeoutMs || fault)
+	{
+		msgUtf8(DtZh::kAgingOvenTimeout);
+		FinishAgingProductionRun(true);
+		return;
+	}
+
+	const int poll = (ov.pollIntervalMs > 500) ? ov.pollIntervalMs : 5000;
+	SetTimer(TIMER_ID_OVEN_WAIT, poll, NULL);
+}
+
+void CDtSampleDlg::OnOvenCooldownTimer()
+{
+	KillTimer(TIMER_ID_OVEN_COOLDOWN);
+	if (!m_bCooldownActive)
+		return;
+
+	m_dtFunction.ReadGateSpecIni();
+	const GateOvenCfg& ov = m_dtFunction.m_gateOven;
+	const DWORD elapsedMs = GetTickCount() - m_agingCooldownStartTick;
+	const DWORD timeoutMs = (DWORD)max(1, ov.cooldownTimeoutMin) * 60U * 1000U;
+
+	bool cooled = false;
+	double pvU = 0.0;
+	double pvD = 0.0;
+	bool fault = false;
+	if (ov.enabled)
+		OvenWaitCooldownOnce(ov, &cooled, &pvU, &pvD, &fault);
+
+	if (cooled && !fault)
+	{
+		if (ov.dualChamber)
+			msgUtf8(DtZh::kAgingCooldownDoneDual, pvU, pvD);
+		else
+			msgUtf8(DtZh::kAgingCooldownDone, pvU);
+		OvenStopOnly(ov);
+		CompleteAgingRunUi();
+		return;
+	}
+
+	if (elapsedMs >= timeoutMs || fault)
+	{
+		msgUtf8(DtZh::kAgingCooldownTimeout);
+		if (ov.enabled)
+			OvenStopOnly(ov);
+		CompleteAgingRunUi();
+		return;
+	}
+
+	const double targetC = ov.cooldownTargetC;
+	const bool nearTarget = ov.dualChamber
+		? (pvU <= targetC + 10.0 && pvD <= targetC + 10.0)
+		: (pvU <= targetC + 10.0);
+	const DWORD nowTick = GetTickCount();
+	const bool intervalDue = (m_lastCooldownLogTick == 0)
+		|| (nowTick - m_lastCooldownLogTick >= 30000);
+	const bool shouldLog = !m_bCooldownLogStarted || intervalDue || nearTarget;
+	if (shouldLog)
+	{
+		msgUtf8(DtZh::kAgingCooldownTick, pvU, pvD);
+		m_bCooldownLogStarted = TRUE;
+		m_lastCooldownLogTick = nowTick;
+	}
+	const int poll = (ov.pollIntervalMs > 500) ? ov.pollIntervalMs : 5000;
+	SetTimer(TIMER_ID_OVEN_COOLDOWN, poll, NULL);
+}
+
+void CDtSampleDlg::OnAgingSampleTimer()
+{
+	KillTimer(TIMER_ID_AGING_SAMPLE);
+	if (!m_bStart || !m_bAgingFlowActive)
+		return;
+
+	m_dtFunction.ReadGateSpecIni();
+	bool anyNewNg = false;
+	(void)AgingRunSampleRound(&m_dtFunction, &anyNewNg);
+
+	const int sampleSec = max(5, m_dtFunction.m_gateAgingGate.sampleIntervalSec);
+	if (m_agingMonitorStartTick == 0)
+		m_agingMonitorStartTick = GetTickCount();
+	m_agingElapsedSec = (int)((GetTickCount() - m_agingMonitorStartTick) / 1000);
+	const int durSec = max(1, m_dtFunction.m_gateAgingGate.durationMin) * 60;
+	UpdateAgingProgressTitle();
+	const int elMin = m_agingElapsedSec / 60;
+	if (elMin > 0 && elMin % 5 == 0 && elMin != m_lastAgingProgressLogMin)
+	{
+		msgUtf8(DtZh::kAgingSampleTick, elMin, m_dtFunction.m_gateAgingGate.durationMin);
+		m_lastAgingProgressLogMin = elMin;
+	}
+	if (anyNewNg)
+		SchedulePreviewGridRepaint();
+
+	if (m_agingElapsedSec >= durSec)
+	{
+		FinishAgingProductionRun(false);
+		return;
+	}
+	SetTimer(TIMER_ID_AGING_SAMPLE, sampleSec * 1000, NULL);
 }
 
 void CDtSampleDlg::StopCaptureAndShowResults(bool forFwPowerCycle)
@@ -1419,6 +1765,8 @@ void CDtSampleDlg::RedrawPreviewGrid()
 		else if (m_dtFunction.IsFirmwareBurnInProgress()
 			|| (m_dtFunction.IsFirmwareBurnOverlayActive() && m_dtFunction.m_bFirmwareBurnHasResult))
 			PaintPreviewCellsFirmwareBurn();
+		else if (ShouldShowAgingMonitor())
+			PaintPreviewCellsAgingMonitor();
 		else if (ShouldShowPreviewStreamState())
 			PaintPreviewCellsStreamState();
 		else if (m_bPreviewPostPowerStream)
@@ -1601,6 +1949,54 @@ void CDtSampleDlg::PaintPreviewCellBurnNg(int dev, int vc)
 	CString tip;
 	tip.Format(_T("D%d V%d\nBurn NG"), dev, vc);
 	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kBurnNgBg, PreviewCellUi::kBurnNgFg);
+}
+
+void CDtSampleDlg::PaintPreviewCellAgingNg(int dev, int vc, LPCTSTR failReason)
+{
+	CString tip;
+	const CString ngLabel = ZH_UTF8(kPreviewAgingNg);
+	if (failReason != NULL && failReason[0] != 0)
+		tip.Format(_T("D%d V%d\r\n%s\r\n%s"), dev, vc, (LPCTSTR)ngLabel, failReason);
+	else
+		tip.Format(_T("D%d V%d\r\n%s"), dev, vc, (LPCTSTR)ngLabel);
+	PaintPreviewCellState(dev, vc, tip, PreviewCellUi::kBurnNgBg, PreviewCellUi::kBurnNgFg);
+}
+
+void CDtSampleDlg::PaintPreviewCellsAgingMonitor()
+{
+	if (!m_dtFunction.IsFa132SlotOnline(m_iActiveFa132Tab))
+	{
+		for (int ld = 0; ld < MAX_DEV; ld++)
+			for (int v = 0; v < MAX_VC; v++)
+				PaintPreviewCellDisconnected(ld, v);
+		return;
+	}
+	for (int ld = 0; ld < MAX_DEV; ld++)
+	{
+		const int d = GlobalDevForLayout(ld);
+		for (int v = 0; v < MAX_VC; v++)
+		{
+			if (!IsPreviewChannelOn(d, v))
+			{
+				if (m_dtFunction.IsDevEnumPresent(d))
+					PaintPreviewCellOff(d, v);
+				else
+					PaintPreviewCellDisconnected(ld, v);
+				continue;
+			}
+			if (AgingIsNgCell(&m_dtFunction, d, v))
+			{
+				PaintPreviewCellAgingNg(d, v, m_dtFunction.m_agingState[d][v].firstNg.failReason);
+				continue;
+			}
+			if (IsPreviewCellStreamingLive(d, v))
+				continue;
+			if (!m_dtFunction.m_workGrabInitDone[d] || !ShouldPaintPreviewStreamNg(d))
+				PaintPreviewCellVideoIdle(d, v);
+			else
+				PaintPreviewCellStreamNg(d, v);
+		}
+	}
 }
 
 void CDtSampleDlg::PaintPreviewCellsFirmwareBurn()
@@ -2079,6 +2475,18 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 		}
 		SchedulePreviewGridRepaint();
 	}
+	else if (nIDEvent == TIMER_ID_OVEN_WAIT)
+	{
+		OnOvenWaitTimer();
+	}
+	else if (nIDEvent == TIMER_ID_AGING_SAMPLE)
+	{
+		OnAgingSampleTimer();
+	}
+	else if (nIDEvent == TIMER_ID_OVEN_COOLDOWN)
+	{
+		OnOvenCooldownTimer();
+	}
 	else if (nIDEvent == TIMER_ID_STREAM_GATE)
 	{
 		KillTimer(TIMER_ID_STREAM_GATE);
@@ -2104,15 +2512,23 @@ void CDtSampleDlg::OnTimer(UINT_PTR nIDEvent)
 		if (ok)
 		{
 			msgUtf8(DtZh::kLogLtPass);
-			SetWindowText(ZH_UTF8(kMainTitleTestOk));
+			if (!m_dtFunction.m_gateAgingTest.enabled)
+				SetWindowText(ZH_UTF8(kMainTitleTestOk));
 		}
 		else
 		{
 			msgUtf8(DtZh::kLogLtNg);
-			SetWindowText(ZH_UTF8(kMainTitleTestNg));
+			if (!m_dtFunction.m_gateAgingTest.enabled)
+				SetWindowText(ZH_UTF8(kMainTitleTestNg));
+		}
+		if (m_dtFunction.m_gateAgingTest.enabled)
+		{
+			BeginAgingAfterLightTest();
+			return;
 		}
 		/* FinalizeProductionRun (CSV + preview NG/OK) already ran inside RunLightGatePerChannelReport. */
 		StopCaptureAndShowResults(FALSE);
+		ReleaseTestBoxAndNotifyPeer(ok);
 		if (m_btnStart.GetSafeHwnd())
 			m_btnStart.SetWindowText(_T("Start"));
 		else if (GetDlgItem(IDC_BUTTON_START))

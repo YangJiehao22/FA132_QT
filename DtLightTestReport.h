@@ -10,6 +10,15 @@ enum ProductionFailStage
 	PROD_STAGE_VERIFY = 2,
 	PROD_STAGE_LIGHT = 3,
 	PROD_STAGE_SENSOR_ID = 4,
+	PROD_STAGE_AGING = 5,
+};
+
+enum AgingCsvResult
+{
+	AGING_CSV_NA = 0,
+	AGING_CSV_SKIP,
+	AGING_CSV_OK,
+	AGING_CSV_NG,
 };
 
 /** ASCII tag for CSV column FailStage. */
@@ -64,6 +73,18 @@ struct LightTestChannelRecord
 
 	/** Lowercase hex, 20 chars when read OK (Ruibo 0x7E80 x10). */
 	CString sensorIdHex;
+
+	/** [aging_test] Enabled=1 fields (NA when aging off). */
+	bool agingEnabled;
+	int agingResult;
+	double agingSsrFps;
+	double agingCurrent_mA;
+	bool agingHasTemp;
+	double agingTempC;
+	double agingAvdd_mV;
+	double agingIovdd_mV;
+	double agingDvdd_mV;
+	CString agingFailReason;
 };
 
 /** Append rows to daily Production_report.csv (create with header+BOM if missing). */

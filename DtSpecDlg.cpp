@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "DtSample.h"
 #include "DtSpecDlg.h"
+#include "DtOvenModbus.h"
 #include "DtEncoding.h"
 #include "DtZhUtf8.h"
 #include "DtDpiUi.h"
@@ -175,6 +176,7 @@ CDtSpecDlg::CDtSpecDlg(DtCarFunction* pFn, CWnd* pParent)
 	, m_specContentH(0)
 	, m_specVisibleContentH(0)
 {
+	memset(m_specContentHByPage, 0, sizeof(m_specContentHByPage));
 }
 
 void CDtSpecDlg::DoDataExchange(CDataExchange* pDX)
@@ -263,6 +265,106 @@ void CDtSpecDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT_SPEC_FW_GRAB_INI, m_edFwGrabIni);
 	DDX_Control(pDX, IDC_BTN_SPEC_FW_GRAB_BROWSE, m_btnFwGrabBrowse);
 	DDX_Control(pDX, IDC_STATIC_SPEC_FW_HINT, m_stFwHint);
+	DDX_Control(pDX, IDC_GRP_SPEC_AGING, m_grpAging);
+	DDX_Control(pDX, IDC_CHK_SPEC_AGING_EN, m_chkAgingEn);
+	DDX_Control(pDX, IDC_CHK_SPEC_AGING_HEAT_START, m_chkAgingHeatStart);
+	DDX_Control(pDX, IDC_GRP_SPEC_OVEN, m_grpOven);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_PROFILE, m_lblOvenProfile);
+	DDX_Control(pDX, IDC_COMBO_SPEC_OVEN_PROFILE, m_cmbOvenProfile);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_HEAT_MODE, m_lblOvenHeatMode);
+	DDX_Control(pDX, IDC_COMBO_SPEC_OVEN_HEAT_MODE, m_cmbOvenHeatMode);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_HOST, m_lblOvenHost);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_HOST, m_edOvenHost);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_PORT, m_lblOvenPort);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_PORT, m_edOvenPort);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_UNIT, m_lblOvenUnit);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_UNIT, m_edOvenUnit);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_TARGET, m_lblOvenTarget);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_TARGET, m_edOvenTarget);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_TOL, m_lblOvenTol);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_TOL, m_edOvenTol);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_WAIT, m_lblOvenWait);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_WAIT, m_edOvenWait);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_POLL, m_lblOvenPoll);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_POLL, m_edOvenPoll);
+	DDX_Control(pDX, IDC_CHK_SPEC_OVEN_D_EN, m_chkOvenDual);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_D_PV, m_lblOvenDPv);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_D_REG_PV, m_edOvenDPv);
+	DDX_Control(pDX, IDC_CHK_SPEC_OVEN_D_INDEP, m_chkOvenCooldown);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_D_HOST, m_lblOvenCooldownTarget);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_D_HOST, m_edOvenCooldownTarget);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_D_PORT, m_lblOvenCooldownTimeout);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_D_PORT, m_edOvenCooldownTimeout);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_D_UNIT, m_lblOvenCooldownTol);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_D_UNIT, m_edOvenCooldownTol);
+	DDX_Control(pDX, IDC_GRP_SPEC_AGING_GATE, m_grpAgingGate);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_DUR, m_lblAgingDur);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_DUR, m_edAgingDur);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_SAMPLE, m_lblAgingSample);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_SAMPLE, m_edAgingSample);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MIN_SSR, m_lblAgingMinSsr);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MIN_SSR, m_edAgingMinSsr);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MAX_SSR, m_lblAgingMaxSsr);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MAX_SSR, m_edAgingMaxSsr);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MIN_CUR, m_lblAgingMinCur);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MIN_CUR, m_edAgingMinCur);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MAX_CUR, m_lblAgingMaxCur);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MAX_CUR, m_edAgingMaxCur);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MIN_TEMP, m_lblAgingMinTemp);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MIN_TEMP, m_edAgingMinTemp);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MAX_TEMP, m_lblAgingMaxTemp);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MAX_TEMP, m_edAgingMaxTemp);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MIN_AVDD, m_lblAgingMinAvdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MIN_AVDD, m_edAgingMinAvdd);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MAX_AVDD, m_lblAgingMaxAvdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MAX_AVDD, m_edAgingMaxAvdd);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MIN_IOVDD, m_lblAgingMinIovdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MIN_IOVDD, m_edAgingMinIovdd);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MAX_IOVDD, m_lblAgingMaxIovdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MAX_IOVDD, m_edAgingMaxIovdd);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MIN_DVDD, m_lblAgingMinDvdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MIN_DVDD, m_edAgingMinDvdd);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_MAX_DVDD, m_lblAgingMaxDvdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_MAX_DVDD, m_edAgingMaxDvdd);
+	DDX_Control(pDX, IDC_GRP_SPEC_AGING_VOLT, m_grpAgingVolt);
+	DDX_Control(pDX, IDC_CHK_SPEC_AGING_VOLT_EN, m_chkAgingVoltEn);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_VOLT_MODE, m_lblAgingVoltMode);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_VOLT_MODE, m_edAgingVoltMode);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_VOLT_SCALE, m_lblAgingVoltScale);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_VOLT_SCALE, m_edAgingVoltScale);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_REG_AVDD, m_lblAgingRegAvdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_REG_AVDD, m_edAgingRegAvdd);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_REG_AVDD_H, m_lblAgingRegAvddH);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_REG_AVDD_H, m_edAgingRegAvddH);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_REG_IOVDD, m_lblAgingRegIovdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_REG_IOVDD, m_edAgingRegIovdd);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_REG_IOVDD_H, m_lblAgingRegIovddH);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_REG_IOVDD_H, m_edAgingRegIovddH);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_REG_DVDD, m_lblAgingRegDvdd);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_REG_DVDD, m_edAgingRegDvdd);
+	DDX_Control(pDX, IDC_LBL_SPEC_AGING_REG_DVDD_H, m_lblAgingRegDvddH);
+	DDX_Control(pDX, IDC_EDIT_SPEC_AGING_REG_DVDD_H, m_edAgingRegDvddH);
+	DDX_Control(pDX, IDC_GRP_SPEC_OVEN_ADV, m_grpOvenAdv);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_REG_SET, m_lblOvenRegSet);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_REG_SET, m_edOvenRegSet);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_COIL_START, m_lblOvenCoilStart);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_COIL_START, m_edOvenCoilStart);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_COIL_STOP, m_lblOvenCoilStop);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_COIL_STOP, m_edOvenCoilStop);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_REG_PV, m_lblOvenRegPv);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_REG_PV, m_edOvenRegPv);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_REG_RUN, m_lblOvenRegRun);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_REG_RUN, m_edOvenRegRun);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_RUN_BIT, m_lblOvenRunBit);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_RUN_BIT, m_edOvenRunBit);
+	DDX_Control(pDX, IDC_LBL_SPEC_OVEN_REG_FAULT, m_lblOvenRegFault);
+	DDX_Control(pDX, IDC_EDIT_SPEC_OVEN_REG_FAULT, m_edOvenRegFault);
+	DDX_Control(pDX, IDC_BTN_SPEC_OVEN_TEST, m_btnOvenTest);
+	DDX_Control(pDX, IDC_BTN_SPEC_OVEN_READ_PV, m_btnOvenReadPv);
+	DDX_Control(pDX, IDC_BTN_SPEC_OVEN_SETTEMP, m_btnOvenSetTemp);
+	DDX_Control(pDX, IDC_BTN_SPEC_OVEN_START, m_btnOvenStart);
+	DDX_Control(pDX, IDC_BTN_SPEC_OVEN_STOP, m_btnOvenStop);
+	DDX_Control(pDX, IDC_STATIC_SPEC_AGING_HINT, m_stAgingHint);
 }
 
 BEGIN_MESSAGE_MAP(CDtSpecDlg, CDialogEx)
@@ -270,11 +372,17 @@ BEGIN_MESSAGE_MAP(CDtSpecDlg, CDialogEx)
 	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_SPEC, &CDtSpecDlg::OnTcnSelchangeTabSpec)
 	ON_BN_CLICKED(IDC_BTN_SPEC_BP_BROWSE, &CDtSpecDlg::OnBnClickedBtnBpBrowse)
 	ON_BN_CLICKED(IDC_CHK_SPEC_BP_SAVE, &CDtSpecDlg::OnBnClickedBpSave)
-	ON_BN_CLICKED(IDC_RAD_BP_ALGO_NEIGHBOR, &CDtSpecDlg::OnBnClickedRadBpAlgo)
-	ON_BN_CLICKED(IDC_RAD_BP_ALGO_HUAWEI, &CDtSpecDlg::OnBnClickedRadBpAlgo)
+	ON_BN_CLICKED(IDC_RAD_BP_ALGO_NEIGHBOR, &CDtSpecDlg::OnBnClickedRadBpNeighbor)
+	ON_BN_CLICKED(IDC_RAD_BP_ALGO_HUAWEI, &CDtSpecDlg::OnBnClickedRadBpHuawei)
 	ON_CONTROL(CBN_SELCHANGE, IDC_COMBO_SPEC_FW_FOV, &CDtSpecDlg::OnCbnSelchangeFwFov)
 	ON_BN_CLICKED(IDC_BTN_SPEC_FW_GRAB_BROWSE, &CDtSpecDlg::OnBnClickedBtnFwGrabBrowse)
 	ON_BN_CLICKED(IDC_CHK_SPEC_FW_EN, &CDtSpecDlg::OnBnClickedChkFwEn)
+	ON_CONTROL(CBN_SELCHANGE, IDC_COMBO_SPEC_OVEN_PROFILE, &CDtSpecDlg::OnCbnSelchangeOvenProfile)
+	ON_BN_CLICKED(IDC_BTN_SPEC_OVEN_TEST, &CDtSpecDlg::OnBnClickedOvenTest)
+	ON_BN_CLICKED(IDC_BTN_SPEC_OVEN_READ_PV, &CDtSpecDlg::OnBnClickedOvenReadPv)
+	ON_BN_CLICKED(IDC_BTN_SPEC_OVEN_SETTEMP, &CDtSpecDlg::OnBnClickedOvenSetTemp)
+	ON_BN_CLICKED(IDC_BTN_SPEC_OVEN_START, &CDtSpecDlg::OnBnClickedOvenStart)
+	ON_BN_CLICKED(IDC_BTN_SPEC_OVEN_STOP, &CDtSpecDlg::OnBnClickedOvenStop)
 	ON_MESSAGE(WM_DPICHANGED, &CDtSpecDlg::OnDpiChanged)
 	ON_WM_VSCROLL()
 	ON_WM_MOUSEWHEEL()
@@ -377,10 +485,23 @@ void CDtSpecDlg::HideAllSpecPageControls()
 	HideGatePageControls();
 	HideBadPixelPageControls();
 	HideFirmwarePageControls();
+	HideAgingPageControls();
 }
 
 BOOL CDtSpecDlg::PreTranslateMessage(MSG* pMsg)
 {
+	if (pMsg->message == WM_MOUSEWHEEL && m_specActivePage == 3 && (GetStyle() & WS_VSCROLL))
+	{
+		POINT pt = { GET_X_LPARAM(pMsg->lParam), GET_Y_LPARAM(pMsg->lParam) };
+		::ScreenToClient(m_hWnd, &pt);
+		CRect cr;
+		GetClientRect(&cr);
+		if (cr.PtInRect(pt))
+		{
+			OnMouseWheel(0, (short)HIWORD(pMsg->wParam), pt);
+			return TRUE;
+		}
+	}
 	return CDialogEx::PreTranslateMessage(pMsg);
 }
 
@@ -802,7 +923,7 @@ int CDtSpecDlg::SpecChromeHeightPx(double scale) const
 	CDtSpecDlg* pDlg = const_cast<CDtSpecDlg*>(this);
 	const int btnH = SpecButtonHeight(pDlg, pDlg->m_fontBody, scale);
 	const int btnBand = btnH + (int)(28 * scale);
-	return margin + tabH + margin + btnBand + (int)(12 * scale);
+	return margin + tabH + margin + btnBand;
 }
 
 void CDtSpecDlg::ApplySpecScroll(int newPos)
@@ -810,7 +931,7 @@ void CDtSpecDlg::ApplySpecScroll(int newPos)
 	if (!(GetStyle() & WS_VSCROLL))
 		return;
 
-	const int maxPos = max(0, m_specContentH - m_specVisibleContentH);
+	const int maxPos = max(0, ActivePageContentH() - m_specVisibleContentH);
 	if (newPos < 0)
 		newPos = 0;
 	if (newPos > maxPos)
@@ -825,22 +946,27 @@ void CDtSpecDlg::ApplySpecScroll(int newPos)
 
 void CDtSpecDlg::ClipActiveSpecPageControls(int visTop, int visBottom)
 {
-	if (!(GetStyle() & WS_VSCROLL))
+	const int visH = max(0, visBottom - visTop);
+	const int pageH = ActivePageContentH();
+	const int threshold = max((int)(4 * m_specLayoutScale), 2);
+	if (pageH <= visH + threshold)
 		return;
 
 	auto clipList = [&](CWnd* wnds[], int count) {
 		for (int i = 0; i < count; i++)
 		{
 			CWnd* p = wnds[i];
-			if (p == NULL || !::IsWindow(p->m_hWnd) || !p->IsWindowVisible())
+			if (p == NULL || !::IsWindow(p->m_hWnd))
 				continue;
 			CRect rc;
 			p->GetWindowRect(&rc);
 			ScreenToClient(&rc);
-			if (rc.bottom <= visTop + 1 || rc.top >= visBottom - 1)
-			{
+			if (rc.top < visTop - 1 || rc.bottom > visBottom + 1)
 				p->ShowWindow(SW_HIDE);
-				p->EnableWindow(FALSE);
+			else
+			{
+				p->EnableWindow(TRUE);
+				p->ShowWindow(SW_SHOW);
 			}
 		}
 	};
@@ -874,7 +1000,7 @@ void CDtSpecDlg::ClipActiveSpecPageControls(int visTop, int visBottom)
 		};
 		clipList(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
 	}
-	else
+	else if (m_specActivePage == 2)
 	{
 		CWnd* wnds[] = {
 			&m_grpFirmware, &m_chkFwEn, &m_lblFwFov, &m_lblFwWarmup, &m_edFwWarmup,
@@ -882,6 +1008,41 @@ void CDtSpecDlg::ClipActiveSpecPageControls(int visTop, int visBottom)
 			&m_stFwHint, &m_cmbFwFov,
 		};
 		clipList(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+	}
+	else if (m_specActivePage == 3)
+	{
+		CWnd* wnds[] = {
+			&m_grpAging, &m_chkAgingEn, &m_chkAgingHeatStart, &m_grpOven,
+			&m_lblOvenProfile, &m_cmbOvenProfile, &m_lblOvenHeatMode, &m_cmbOvenHeatMode,
+			&m_lblOvenHost, &m_edOvenHost, &m_lblOvenPort, &m_edOvenPort,
+			&m_lblOvenUnit, &m_edOvenUnit, &m_lblOvenTarget, &m_edOvenTarget,
+			&m_lblOvenTol, &m_edOvenTol, &m_lblOvenWait, &m_edOvenWait,
+			&m_lblOvenPoll, &m_edOvenPoll,
+			&m_chkOvenDual, &m_lblOvenDPv, &m_edOvenDPv, &m_chkOvenCooldown,
+			&m_lblOvenCooldownTarget, &m_edOvenCooldownTarget,
+			&m_lblOvenCooldownTimeout, &m_edOvenCooldownTimeout,
+			&m_lblOvenCooldownTol, &m_edOvenCooldownTol,
+			&m_btnOvenTest, &m_btnOvenReadPv, &m_btnOvenSetTemp, &m_btnOvenStart, &m_btnOvenStop,
+			&m_grpAgingGate, &m_lblAgingDur, &m_edAgingDur, &m_lblAgingSample, &m_edAgingSample,
+			&m_lblAgingMinSsr, &m_edAgingMinSsr, &m_lblAgingMaxSsr, &m_edAgingMaxSsr,
+			&m_lblAgingMinCur, &m_edAgingMinCur, &m_lblAgingMaxCur, &m_edAgingMaxCur,
+			&m_lblAgingMinTemp, &m_edAgingMinTemp, &m_lblAgingMaxTemp, &m_edAgingMaxTemp,
+			&m_lblAgingMinAvdd, &m_edAgingMinAvdd, &m_lblAgingMaxAvdd, &m_edAgingMaxAvdd,
+			&m_lblAgingMinIovdd, &m_edAgingMinIovdd, &m_lblAgingMaxIovdd, &m_edAgingMaxIovdd,
+			&m_lblAgingMinDvdd, &m_edAgingMinDvdd, &m_lblAgingMaxDvdd, &m_edAgingMaxDvdd,
+			&m_grpAgingVolt, &m_chkAgingVoltEn, &m_lblAgingVoltMode, &m_edAgingVoltMode,
+			&m_lblAgingVoltScale, &m_edAgingVoltScale, &m_lblAgingRegAvdd, &m_edAgingRegAvdd,
+			&m_lblAgingRegAvddH, &m_edAgingRegAvddH, &m_lblAgingRegIovdd, &m_edAgingRegIovdd,
+			&m_lblAgingRegIovddH, &m_edAgingRegIovddH, &m_lblAgingRegDvdd, &m_edAgingRegDvdd,
+			&m_lblAgingRegDvddH, &m_edAgingRegDvddH,
+			&m_grpOvenAdv, &m_lblOvenRegSet, &m_edOvenRegSet,
+			&m_lblOvenCoilStart, &m_edOvenCoilStart, &m_lblOvenCoilStop, &m_edOvenCoilStop,
+			&m_lblOvenRegPv, &m_edOvenRegPv, &m_lblOvenRegRun, &m_edOvenRegRun,
+			&m_lblOvenRunBit, &m_edOvenRunBit, &m_lblOvenRegFault, &m_edOvenRegFault,
+			&m_stAgingHint,
+		};
+		clipList(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+		UpdateOvenRegEditEnableState();
 	}
 }
 
@@ -1018,11 +1179,157 @@ void CDtSpecDlg::RaiseSpecDialogButtons()
 	}
 }
 
-int CDtSpecDlg::MeasureMaxPageHeight(const CRect& viewport, double scale)
+int CDtSpecDlg::ActivePageContentH() const
+{
+	if (m_specActivePage >= 0 && m_specActivePage < 4 && m_specContentHByPage[m_specActivePage] > 0)
+		return m_specContentHByPage[m_specActivePage];
+	return m_specContentH;
+}
+
+int CDtSpecDlg::SpecPageMaxControlBottom(int page)
+{
+	auto scan = [this](CWnd* wnds[], int count) -> int {
+		int maxBottom = 0;
+		for (int i = 0; i < count; i++)
+		{
+			CWnd* p = wnds[i];
+			if (p == NULL || !::IsWindow(p->m_hWnd) || !p->IsWindowVisible())
+				continue;
+			CRect rc;
+			p->GetWindowRect(&rc);
+			ScreenToClient(&rc);
+			if (rc.bottom > maxBottom)
+				maxBottom = rc.bottom;
+		}
+		return maxBottom;
+	};
+
+	if (page == 0)
+	{
+		CWnd* wnds[] = {
+			&m_stTitle, &m_stPath, &m_grpTiming, &m_lblDelay, &m_edDelay,
+			&m_grpLimits, &m_lblDef1, &m_lblDef2, &m_lblDef3, &m_lblDef4,
+			&m_lblDef5, &m_lblDef6, &m_edDefMinSsr, &m_edDefMaxSsr,
+			&m_edDefMinCur, &m_edDefMaxCur, &m_edDefMinTemp, &m_edDefMaxTemp,
+			&m_grpTempI2c, &m_chkTempEn, &m_lblTempAddr, &m_lblTempMode,
+			&m_lblTempRegLo, &m_lblTempRegHi, &m_lblTempCoeffLo, &m_lblTempCoeffHi,
+			&m_lblTempDiv, &m_lblTempOffset, &m_edTempAddr, &m_edTempMode,
+			&m_edTempRegLo, &m_edTempRegHi, &m_edTempCoeffLo, &m_edTempCoeffHi,
+			&m_edTempDiv, &m_edTempOffset, &m_stFormula, &m_stHint,
+		};
+		return scan(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+	}
+	if (page == 1)
+	{
+		CWnd* wnds[] = {
+			&m_grpBadPixel, &m_chkBpEn, &m_lblBpAlgo, &m_radBpNeighbor, &m_radBpHuawei,
+			&m_grpBpHuawei, &m_grpBpNeighbor, &m_lblBpClusterTh, &m_edBpClusterTh,
+			&m_lblBpClusterMin, &m_edBpClusterMin, &m_lblBpSinglePpm, &m_edBpSinglePpm,
+			&m_chkBpGrGbToG, &m_lblBpMax, &m_lblBpHotDelta, &m_edBpMax, &m_edBpHotDelta,
+			&m_lblBpHotAbs, &m_edBpHotAbs, &m_lblBpBorder, &m_edBpBorder,
+			&m_chkBpSave, &m_grpBpSnapFiles, &m_chkBpSaveBmp, &m_chkBpSavePacked,
+			&m_chkBpSaveU12, &m_chkBpSaveU10, &m_lblBpDir, &m_edBpDir, &m_btnBpBrowse,
+			&m_stBpHint,
+		};
+		return scan(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+	}
+	if (page == 2)
+	{
+		CWnd* wnds[] = {
+			&m_grpFirmware, &m_chkFwEn, &m_lblFwFov, &m_lblFwWarmup, &m_edFwWarmup,
+			&m_lblFwPath, &m_stFwPath, &m_lblFwGrabIni, &m_edFwGrabIni, &m_btnFwGrabBrowse,
+			&m_stFwHint, &m_cmbFwFov,
+		};
+		return scan(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+	}
+	if (page == 3)
+	{
+		CWnd* wnds[] = {
+			&m_grpAging, &m_chkAgingEn, &m_chkAgingHeatStart, &m_grpOven,
+			&m_lblOvenProfile, &m_cmbOvenProfile, &m_lblOvenHeatMode, &m_cmbOvenHeatMode,
+			&m_lblOvenHost, &m_edOvenHost, &m_lblOvenPort, &m_edOvenPort,
+			&m_lblOvenUnit, &m_edOvenUnit, &m_lblOvenTarget, &m_edOvenTarget,
+			&m_lblOvenTol, &m_edOvenTol, &m_lblOvenWait, &m_edOvenWait,
+			&m_lblOvenPoll, &m_edOvenPoll,
+			&m_chkOvenDual, &m_lblOvenDPv, &m_edOvenDPv, &m_chkOvenCooldown,
+			&m_lblOvenCooldownTarget, &m_edOvenCooldownTarget,
+			&m_lblOvenCooldownTimeout, &m_edOvenCooldownTimeout,
+			&m_lblOvenCooldownTol, &m_edOvenCooldownTol,
+			&m_btnOvenTest, &m_btnOvenReadPv, &m_btnOvenSetTemp, &m_btnOvenStart, &m_btnOvenStop,
+			&m_grpAgingGate, &m_lblAgingDur, &m_edAgingDur, &m_lblAgingSample, &m_edAgingSample,
+			&m_lblAgingMinSsr, &m_edAgingMinSsr, &m_lblAgingMaxSsr, &m_edAgingMaxSsr,
+			&m_lblAgingMinCur, &m_edAgingMinCur, &m_lblAgingMaxCur, &m_edAgingMaxCur,
+			&m_lblAgingMinTemp, &m_edAgingMinTemp, &m_lblAgingMaxTemp, &m_edAgingMaxTemp,
+			&m_lblAgingMinAvdd, &m_edAgingMinAvdd, &m_lblAgingMaxAvdd, &m_edAgingMaxAvdd,
+			&m_lblAgingMinIovdd, &m_edAgingMinIovdd, &m_lblAgingMaxIovdd, &m_edAgingMaxIovdd,
+			&m_lblAgingMinDvdd, &m_edAgingMinDvdd, &m_lblAgingMaxDvdd, &m_edAgingMaxDvdd,
+			&m_grpAgingVolt, &m_chkAgingVoltEn, &m_lblAgingVoltMode, &m_edAgingVoltMode,
+			&m_lblAgingVoltScale, &m_edAgingVoltScale, &m_lblAgingRegAvdd, &m_edAgingRegAvdd,
+			&m_lblAgingRegAvddH, &m_edAgingRegAvddH, &m_lblAgingRegIovdd, &m_edAgingRegIovdd,
+			&m_lblAgingRegIovddH, &m_edAgingRegIovddH, &m_lblAgingRegDvdd, &m_edAgingRegDvdd,
+			&m_lblAgingRegDvddH, &m_edAgingRegDvddH,
+			&m_grpOvenAdv, &m_lblOvenRegSet, &m_edOvenRegSet,
+			&m_lblOvenCoilStart, &m_edOvenCoilStart, &m_lblOvenCoilStop, &m_edOvenCoilStop,
+			&m_lblOvenRegPv, &m_edOvenRegPv, &m_lblOvenRegRun, &m_edOvenRegRun,
+			&m_lblOvenRunBit, &m_edOvenRunBit, &m_lblOvenRegFault, &m_edOvenRegFault,
+			&m_stAgingHint,
+		};
+		return scan(wnds, (int)(sizeof(wnds) / sizeof(wnds[0])));
+	}
+	return 0;
+}
+
+void CDtSpecDlg::SyncSpecScrollHeightFromControls(int contentTop)
+{
+	const int page = m_specActivePage;
+	if (page < 0 || page >= 4)
+		return;
+
+	const int maxBottom = SpecPageMaxControlBottom(page);
+	if (maxBottom <= contentTop)
+		return;
+
+	const int actualH = maxBottom - contentTop + (int)(16 * m_specLayoutScale);
+	if (actualH > m_specContentHByPage[page])
+		m_specContentHByPage[page] = actualH;
+}
+
+void CDtSpecDlg::UpdateSpecScrollForActivePage()
+{
+	const int pageH = ActivePageContentH();
+	const int threshold = max((int)(4 * m_specLayoutScale), 2);
+	const BOOL needScroll = (pageH > m_specVisibleContentH + threshold);
+	if (needScroll)
+	{
+		ModifyStyle(0, WS_VSCROLL);
+		SetWindowPos(NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_DRAWFRAME);
+		const int maxPos = max(0, pageH - m_specVisibleContentH);
+		if (m_specScrollPos > maxPos)
+			m_specScrollPos = maxPos;
+
+		SCROLLINFO si = {};
+		si.cbSize = sizeof(si);
+		si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+		si.nMin = 0;
+		si.nMax = pageH;
+		si.nPage = (UINT)m_specVisibleContentH;
+		si.nPos = m_specScrollPos;
+		SetScrollInfo(SB_VERT, &si, TRUE);
+		ShowScrollBar(SB_VERT, TRUE);
+	}
+	else
+	{
+		m_specScrollPos = 0;
+		ModifyStyle(WS_VSCROLL, 0);
+		ShowScrollBar(SB_VERT, FALSE);
+	}
+}
+
+int CDtSpecDlg::MeasureAllPageHeights(const CRect& viewport, double scale, int outHeights[4])
 {
 	const int savedPage = m_specActivePage;
 	int maxH = 0;
-	for (int p = 0; p < 3; p++)
+	for (int p = 0; p < 4; p++)
 	{
 		m_specActivePage = p;
 		int h = 0;
@@ -1033,13 +1340,22 @@ int CDtSpecDlg::MeasureMaxPageHeight(const CRect& viewport, double scale)
 		}
 		else if (p == 1)
 			h = LayoutBadPixelPage(viewport, scale, false);
-		else
+		else if (p == 2)
 			h = LayoutFirmwarePage(viewport, scale, false);
+		else
+			h = LayoutAgingPage(viewport, scale, false);
+		outHeights[p] = h;
 		if (h > maxH)
 			maxH = h;
 	}
 	m_specActivePage = savedPage;
 	return maxH;
+}
+
+int CDtSpecDlg::MeasureMaxPageHeight(const CRect& viewport, double scale)
+{
+	int heights[4] = {};
+	return MeasureAllPageHeights(viewport, scale, heights);
 }
 
 void CDtSpecDlg::InitSpecDialogFrame(bool force)
@@ -1054,6 +1370,7 @@ void CDtSpecDlg::InitSpecDialogFrame(bool force)
 	double fitScale = dpiScale;
 	int contentH = 0;
 	int wantW = 0;
+	int pageH[4] = {};
 
 	for (double s = dpiScale; s >= 0.82; s -= 0.025)
 	{
@@ -1063,9 +1380,10 @@ void CDtSpecDlg::InitSpecDialogFrame(bool force)
 		const CRect measureArea(0, 0, contentWidth, 20000);
 
 		HideAllSpecPageControls();
-		contentH = MeasureMaxPageHeight(measureArea, s);
+		MeasureAllPageHeights(measureArea, s, pageH);
 		HideAllSpecPageControls();
 
+		contentH = max(pageH[0], max(pageH[1], pageH[2]));
 		const int chromeH = SpecChromeHeightPx(s);
 		const int maxClientH = MaxClientHeightForWorkArea(wantW, wr, s);
 		fitScale = s;
@@ -1085,26 +1403,67 @@ void CDtSpecDlg::InitSpecDialogFrame(bool force)
 	const CRect measureArea(0, 0, contentWidth, 20000);
 
 	HideAllSpecPageControls();
-	contentH = MeasureMaxPageHeight(measureArea, fitScale);
+	MeasureAllPageHeights(measureArea, fitScale, m_specContentHByPage);
 	HideAllSpecPageControls();
+	contentH = max(m_specContentHByPage[0], max(m_specContentHByPage[1], m_specContentHByPage[2]));
 	m_specContentH = contentH;
 
-	const int chromeH = SpecChromeHeightPx(fitScale);
-	int wantClientH = contentH + chromeH;
-	const int minClientH = m_specBtnBandH + m_specTabH + m_specMargin * 3 + (int)(120 * fitScale);
+	m_specFrameReady = true;
+}
+
+void CDtSpecDlg::ResizeSpecDialogForActivePage()
+{
+	if (!m_specFrameReady)
+		InitSpecDialogFrame(false);
+	if (!m_specFrameReady)
+		return;
+
+	CRect wr;
+	SystemParametersInfo(SPI_GETWORKAREA, 0, &wr, 0);
+
+	const double scale = m_specLayoutScale;
+	const int wantW = min((int)(720 * scale), wr.Width() - (int)(32 * scale));
+	const int contentWidth = max(wantW - m_specMargin * 2, (int)(480 * scale));
+	const CRect measureArea(0, 0, contentWidth, 20000);
+
+	HideAllSpecPageControls();
+	MeasureAllPageHeights(measureArea, scale, m_specContentHByPage);
+	HideAllSpecPageControls();
+
+	const int baseContentH = max(m_specContentHByPage[0], max(m_specContentHByPage[1], m_specContentHByPage[2]));
+	const int page = m_specActivePage;
+	int contentH = (page == 3) ? m_specContentHByPage[3] : baseContentH;
+	if (contentH <= 0)
+		contentH = m_specContentH;
+	m_specContentH = contentH;
+
+	m_specScrollPos = 0;
+	ModifyStyle(WS_VSCROLL, 0);
+	ShowScrollBar(SB_VERT, FALSE);
+
+	const int chromeH = SpecChromeHeightPx(scale);
+	int wantClientH = 0;
+	if (page == 3)
+		wantClientH = baseContentH + chromeH + (int)(8 * scale);
+	else
+		wantClientH = contentH + chromeH + (int)(8 * scale);
+	const int minClientH = m_specBtnBandH + m_specTabH + m_specMargin * 3 + (int)(120 * scale);
 	if (wantClientH < minClientH)
 		wantClientH = minClientH;
 
-	const int maxClientH = MaxClientHeightForWorkArea(wantW, wr, fitScale);
+	const int maxClientH = MaxClientHeightForWorkArea(wantW, wr, scale);
 	if (wantClientH > maxClientH)
 		wantClientH = maxClientH;
 
+	CRect wrBefore;
+	GetWindowRect(&wrBefore);
+
 	ResizeSpecClient(wantW, wantClientH);
 
-	CRect wrWin;
-	GetWindowRect(&wrWin);
-	const int posX = wr.left + (wr.Width() - wrWin.Width()) / 2;
-	const int posY = wr.top + (wr.Height() - wrWin.Height()) / 2;
+	CRect wrAfter;
+	GetWindowRect(&wrAfter);
+	int posX = wrBefore.left + (wrBefore.Width() - wrAfter.Width()) / 2;
+	int posY = wrBefore.top;
 	SetWindowPos(NULL, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 	ClampSpecDialogToWorkArea(wr);
 
@@ -1114,35 +1473,10 @@ void CDtSpecDlg::InitSpecDialogFrame(bool force)
 
 	const int contentChrome = m_specMargin + m_specTabH + m_specMargin + m_specBtnBandH;
 	m_specVisibleContentH = max(0, cr.bottom - contentChrome);
-	if (m_specVisibleContentH < (int)(100 * fitScale))
-		m_specVisibleContentH = (int)(100 * fitScale);
+	if (m_specVisibleContentH < (int)(100 * scale))
+		m_specVisibleContentH = (int)(100 * scale);
 
-	const BOOL needScroll = (contentH > m_specVisibleContentH + (int)(4 * fitScale));
-	if (needScroll)
-	{
-		ModifyStyle(0, WS_VSCROLL);
-		const int maxPos = max(0, contentH - m_specVisibleContentH);
-		if (m_specScrollPos > maxPos)
-			m_specScrollPos = maxPos;
-
-		SCROLLINFO si = {};
-		si.cbSize = sizeof(si);
-		si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-		si.nMin = 0;
-		si.nMax = contentH;
-		si.nPage = (UINT)m_specVisibleContentH;
-		si.nPos = m_specScrollPos;
-		SetScrollInfo(SB_VERT, &si, TRUE);
-		ShowScrollBar(SB_VERT, TRUE);
-	}
-	else
-	{
-		m_specScrollPos = 0;
-		ModifyStyle(WS_VSCROLL, 0);
-		ShowScrollBar(SB_VERT, FALSE);
-	}
-
-	m_specFrameReady = true;
+	Invalidate(TRUE);
 }
 
 void CDtSpecDlg::RelayoutSpecPage()
@@ -1159,23 +1493,34 @@ void CDtSpecDlg::RelayoutSpecPage()
 	const int contentTop = m_specMargin + m_specTabH + m_specMargin;
 	const int contentBottom = cr.bottom - m_specBtnBandH;
 	const int visH = max(contentBottom - contentTop, (int)(80 * scale));
-	const int layoutH = max(m_specContentH, visH);
+	const int pageContentH = (page >= 0 && page < 4) ? m_specContentHByPage[page] : m_specContentH;
+
+	const int layoutH = max(pageContentH, visH);
+	const int layoutTop = contentTop - m_specScrollPos;
 	const CRect layoutVp(
 		m_specMargin,
-		contentTop - m_specScrollPos,
+		layoutTop,
 		cr.right - m_specMargin,
-		contentTop - m_specScrollPos + layoutH);
+		layoutTop + layoutH);
 
 	HideAllSpecPageControls();
+	int laidOutH = 0;
 	if (page == 0)
 	{
 		UpdateFormulaText();
-		LayoutGatePage(layoutVp, scale, true);
+		laidOutH = LayoutGatePage(layoutVp, scale, true);
 	}
 	else if (page == 1)
-		LayoutBadPixelPage(layoutVp, scale, true);
+		laidOutH = LayoutBadPixelPage(layoutVp, scale, true);
+	else if (page == 2)
+		laidOutH = LayoutFirmwarePage(layoutVp, scale, true);
 	else
-		LayoutFirmwarePage(layoutVp, scale, true);
+		laidOutH = LayoutAgingPage(layoutVp, scale, true);
+
+	if (laidOutH > 0 && page >= 0 && page < 4)
+		m_specContentHByPage[page] = laidOutH;
+
+	SyncSpecScrollHeightFromControls(contentTop);
 
 	if (page != 0)
 		HideGatePageControls();
@@ -1183,9 +1528,15 @@ void CDtSpecDlg::RelayoutSpecPage()
 		HideBadPixelPageControls();
 	if (page != 2)
 		HideFirmwarePageControls();
+	if (page != 3)
+		HideAgingPageControls();
 
+	UpdateSpecScrollForActivePage();
 	ClipActiveSpecPageControls(contentTop, contentBottom);
+	if (page == 3)
+		UpdateOvenRegEditEnableState();
 	AdjustSpecPageZOrder();
+	RaiseSpecDialogButtons();
 }
 
 static void SpecPushWndToBack(CWnd* pWnd)
@@ -1199,11 +1550,31 @@ void CDtSpecDlg::AdjustSpecPageZOrder()
 	CButton* groups[] = {
 		&m_grpTiming, &m_grpLimits, &m_grpTempI2c, &m_grpBadPixel,
 		&m_grpBpHuawei, &m_grpBpNeighbor, &m_grpBpSnapFiles, &m_grpFirmware,
+		&m_grpAging, &m_grpOven, &m_grpAgingGate, &m_grpAgingVolt, &m_grpOvenAdv,
 	};
 	for (int i = 0; i < (int)(sizeof(groups) / sizeof(groups[0])); i++)
 		SpecPushWndToBack(groups[i]);
 
 	RaiseSpecDialogButtons();
+	if (m_specActivePage == 1)
+		RaiseBadPixelAlgoControls();
+}
+
+void CDtSpecDlg::RaiseBadPixelAlgoControls()
+{
+	CWnd* wnds[] = {
+		&m_chkBpEn, &m_lblBpAlgo, &m_radBpNeighbor, &m_radBpHuawei,
+		&m_lblBpMax, &m_lblBpHotDelta, &m_edBpMax, &m_edBpHotDelta,
+		&m_lblBpHotAbs, &m_edBpHotAbs, &m_lblBpBorder, &m_edBpBorder,
+		&m_lblBpClusterTh, &m_edBpClusterTh, &m_lblBpClusterMin, &m_edBpClusterMin,
+		&m_lblBpSinglePpm, &m_edBpSinglePpm, &m_chkBpGrGbToG,
+	};
+	for (int i = 0; i < (int)(sizeof(wnds) / sizeof(wnds[0])); i++)
+	{
+		CWnd* p = wnds[i];
+		if (p != NULL && ::IsWindow(p->m_hWnd))
+			p->SetWindowPos(&CWnd::wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+	}
 }
 
 static void EnsureStandardButtonStyle(CWnd* pWnd, bool radio)
@@ -1212,7 +1583,12 @@ static void EnsureStandardButtonStyle(CWnd* pWnd, bool radio)
 		return;
 	pWnd->ModifyStyle(BS_OWNERDRAW, 0);
 	if (radio)
+	{
+		const DWORD style = (DWORD)pWnd->GetStyle();
+		if ((style & 0xF) != BS_AUTORADIOBUTTON)
+			pWnd->ModifyStyle(BS_CHECKBOX | BS_AUTOCHECKBOX | BS_PUSHBUTTON, BS_AUTORADIOBUTTON);
 		pWnd->ModifyStyle(0, WS_TABSTOP);
+	}
 	else
 		pWnd->ModifyStyle(0, BS_AUTOCHECKBOX | WS_TABSTOP);
 }
@@ -1327,17 +1703,20 @@ void CDtSpecDlg::ShowSpecPage(int page)
 {
 	if (page < 0)
 		page = 0;
-	if (page > 2)
-		page = 2;
+	if (page > 3)
+		page = 3;
 	m_specActivePage = page;
 	if (m_pFn != NULL)
 		m_firmware = m_pFn->m_gateFirmwareBurn;
 
 	m_specScrollPos = 0;
-	if (GetStyle() & WS_VSCROLL)
-		SetScrollPos(SB_VERT, 0, TRUE);
+	ModifyStyle(WS_VSCROLL, 0);
+	ShowScrollBar(SB_VERT, FALSE);
 
+	ResizeSpecDialogForActivePage();
 	RelayoutSpecPage();
+	if (page == 3 && (GetStyle() & WS_VSCROLL))
+		RelayoutSpecPage();
 
 	if (page == 2 && m_pFn != NULL)
 	{
@@ -1359,6 +1738,7 @@ LRESULT CDtSpecDlg::OnDpiChanged(WPARAM /*wParam*/, LPARAM /*lParam*/)
 	ApplyDialogFonts();
 	EnsureStandardCheckAndRadioButtons();
 	InitSpecDialogFrame(true);
+	ResizeSpecDialogForActivePage();
 	RelayoutSpecPage();
 	return 0;
 }
@@ -1368,11 +1748,15 @@ void CDtSpecDlg::OnTcnSelchangeTabSpec(NMHDR* /*pNMHDR*/, LRESULT* pResult)
 	const int sel = m_tab.GetCurSel();
 	if (sel >= 0)
 	{
+		m_specScrollPos = 0;
 		ShowSpecPage(sel);
 		if (sel == 0)
 			UpdateFormulaText();
 		else if (sel == 1)
+		{
+			UpdateBadPixelAlgoUi();
 			UpdateBadPixelSnapTypeUi();
+		}
 		else if (sel == 2)
 			UpdateFirmwarePathLabel();
 	}
@@ -1420,6 +1804,16 @@ BOOL CDtSpecDlg::OnInitDialog()
 			_T("DDX_Control failed for firmware combo (IDC_COMBO_SPEC_FW_FOV=%u).\r\n")
 			_T("Member m_cmbFwFov has no HWND — check DoDataExchange ID matches DtSpecSettings.rc."),
 			(UINT)IDC_COMBO_SPEC_FW_FOV);
+		AfxMessageBox(err, MB_ICONERROR);
+		EndDialog(IDCANCEL);
+		return TRUE;
+	}
+	if (!::IsWindow(m_edOvenRunBit.m_hWnd) || !::IsWindow(m_edOvenRegFault.m_hWnd))
+	{
+		err.Format(
+			_T("Spec dialog missing oven advanced controls (RunStateBit/RegFault).\r\n")
+			_T("Rebuild after updating DtSpecSettings.rc (IDs %u/%u)."),
+			(UINT)IDC_EDIT_SPEC_OVEN_RUN_BIT, (UINT)IDC_EDIT_SPEC_OVEN_REG_FAULT);
 		AfxMessageBox(err, MB_ICONERROR);
 		EndDialog(IDCANCEL);
 		return TRUE;
@@ -1474,6 +1868,7 @@ BOOL CDtSpecDlg::OnInitDialog()
 	m_tab.InsertItem(0, _T("GateSpec.ini"));
 	m_tab.InsertItem(1, ZH_UTF8(kSpecTabBp));
 	m_tab.InsertItem(2, ZH_UTF8(kSpecTabFirmware));
+	m_tab.InsertItem(3, ZH_UTF8(kSpecTabAging));
 
 	m_chkBpEn.SetWindowText(ZH_UTF8(kSpecBpEn));
 	m_lblBpAlgo.SetWindowText(ZH_UTF8(kSpecBpAlgo));
@@ -1507,7 +1902,68 @@ BOOL CDtSpecDlg::OnInitDialog()
 	m_btnFwGrabBrowse.SetWindowText(ZH_UTF8(kSpecBpBrowse));
 	m_stFwHint.SetWindowText(ZH_UI(kSpecFwHint));
 
+	m_grpAging.SetWindowText(ZH_UTF8(kSpecGrpAgingTest));
+	m_chkAgingEn.SetWindowText(ZH_UTF8(kSpecAgingEn));
+	m_chkAgingHeatStart.SetWindowText(ZH_UTF8(kSpecAgingHeatStart));
+	m_grpOven.SetWindowText(ZH_UTF8(kSpecGrpOven));
+	m_lblOvenProfile.SetWindowText(ZH_UTF8(kSpecOvenProfile));
+	m_lblOvenHost.SetWindowText(ZH_UTF8(kSpecOvenHost));
+	m_lblOvenPort.SetWindowText(ZH_UTF8(kSpecOvenPort));
+	m_lblOvenUnit.SetWindowText(ZH_UTF8(kSpecOvenUnit));
+	m_lblOvenTarget.SetWindowText(ZH_UTF8(kSpecOvenTarget));
+	m_lblOvenTol.SetWindowText(ZH_UTF8(kSpecOvenTol));
+	m_lblOvenWait.SetWindowText(ZH_UTF8(kSpecOvenWait));
+	m_lblOvenPoll.SetWindowText(ZH_UTF8(kSpecOvenPoll));
+	m_lblOvenHeatMode.SetWindowText(ZH_UTF8(kSpecOvenHeatMode));
+	m_chkOvenDual.SetWindowText(ZH_UTF8(kSpecOvenDEn));
+	m_lblOvenDPv.SetWindowText(ZH_UTF8(kSpecOvenDPv));
+	m_chkOvenCooldown.SetWindowText(ZH_UTF8(kSpecOvenCooldownEn));
+	m_lblOvenCooldownTarget.SetWindowText(ZH_UTF8(kSpecOvenCooldownTarget));
+	m_lblOvenCooldownTimeout.SetWindowText(ZH_UTF8(kSpecOvenCooldownTimeout));
+	m_lblOvenCooldownTol.SetWindowText(ZH_UTF8(kSpecOvenCooldownTol));
+	m_grpAgingGate.SetWindowText(ZH_UTF8(kSpecGrpAgingGate));
+	m_lblAgingDur.SetWindowText(ZH_UTF8(kSpecAgingDur));
+	m_lblAgingSample.SetWindowText(ZH_UTF8(kSpecAgingSample));
+	m_lblAgingMinSsr.SetWindowText(ZH_UTF8(kSpecAgingMinFps));
+	m_lblAgingMaxSsr.SetWindowText(ZH_UTF8(kSpecAgingMaxFps));
+	m_lblAgingMinCur.SetWindowText(ZH_UTF8(kSpecAgingMinCur));
+	m_lblAgingMaxCur.SetWindowText(ZH_UTF8(kSpecAgingMaxCur));
+	m_lblAgingMinTemp.SetWindowText(ZH_UTF8(kSpecAgingMinTemp));
+	m_lblAgingMaxTemp.SetWindowText(ZH_UTF8(kSpecAgingMaxTemp));
+	m_lblAgingMinAvdd.SetWindowText(ZH_UTF8(kSpecAgingMinAvdd));
+	m_lblAgingMaxAvdd.SetWindowText(ZH_UTF8(kSpecAgingMaxAvdd));
+	m_lblAgingMinIovdd.SetWindowText(ZH_UTF8(kSpecAgingMinIovdd));
+	m_lblAgingMaxIovdd.SetWindowText(ZH_UTF8(kSpecAgingMaxIovdd));
+	m_lblAgingMinDvdd.SetWindowText(ZH_UTF8(kSpecAgingMinDvdd));
+	m_lblAgingMaxDvdd.SetWindowText(ZH_UTF8(kSpecAgingMaxDvdd));
+	m_grpAgingVolt.SetWindowText(ZH_UTF8(kSpecGrpAgingVolt));
+	m_chkAgingVoltEn.SetWindowText(ZH_UTF8(kSpecAgingVoltEn));
+	m_lblAgingVoltMode.SetWindowText(ZH_UTF8(kSpecAgingVoltMode));
+	m_lblAgingVoltScale.SetWindowText(ZH_UTF8(kSpecAgingVoltScale));
+	m_lblAgingRegAvdd.SetWindowText(ZH_UTF8(kSpecAgingRegAvdd));
+	m_lblAgingRegAvddH.SetWindowText(ZH_UTF8(kSpecAgingRegAvddH));
+	m_lblAgingRegIovdd.SetWindowText(ZH_UTF8(kSpecAgingRegIovdd));
+	m_lblAgingRegIovddH.SetWindowText(ZH_UTF8(kSpecAgingRegIovddH));
+	m_lblAgingRegDvdd.SetWindowText(ZH_UTF8(kSpecAgingRegDvdd));
+	m_lblAgingRegDvddH.SetWindowText(ZH_UTF8(kSpecAgingRegDvddH));
+	m_grpOvenAdv.SetWindowText(ZH_UTF8(kSpecGrpOvenAdv));
+	m_lblOvenRegSet.SetWindowText(ZH_UTF8(kSpecOvenLblSet));
+	m_lblOvenCoilStart.SetWindowText(ZH_UTF8(kSpecOvenLblCoilStart));
+	m_lblOvenCoilStop.SetWindowText(ZH_UTF8(kSpecOvenLblCoilStop));
+	m_lblOvenRegPv.SetWindowText(ZH_UTF8(kSpecOvenLblPv));
+	m_lblOvenRegRun.SetWindowText(ZH_UTF8(kSpecOvenLblRun));
+	m_lblOvenRunBit.SetWindowText(ZH_UTF8(kSpecOvenLblRunBit));
+	m_lblOvenRegFault.SetWindowText(ZH_UTF8(kSpecOvenLblFault));
+	m_btnOvenTest.SetWindowText(ZH_UTF8(kSpecOvenTestConn));
+	m_btnOvenReadPv.SetWindowText(ZH_UTF8(kSpecOvenReadPv));
+	m_btnOvenSetTemp.SetWindowText(ZH_UTF8(kSpecOvenSetTemp));
+	m_btnOvenStart.SetWindowText(ZH_UTF8(kSpecOvenStartBtn));
+	m_btnOvenStop.SetWindowText(ZH_UTF8(kSpecOvenStopBtn));
+	m_stAgingHint.SetWindowText(ZH_UTF8(kSpecAgingHint));
+
 	FillFirmwareFovCombo();
+	FillOvenProfileCombo();
+	FillOvenHeatModeCombo();
 
 	m_grpBadPixel.ShowWindow(SW_HIDE);
 	m_grpFirmware.ShowWindow(SW_HIDE);
@@ -1522,12 +1978,17 @@ BOOL CDtSpecDlg::OnInitDialog()
 	m_edFwGrabIni.ShowWindow(SW_HIDE);
 	m_btnFwGrabBrowse.ShowWindow(SW_HIDE);
 	m_stFwHint.ShowWindow(SW_HIDE);
+	HideAgingPageControls();
 
 	m_pFn->ReadGateSpecIni();
 	m_def = m_pFn->m_gateDefault;
 	m_tempI2c = m_pFn->m_gateSensorTempI2c;
 	m_badPixel = m_pFn->m_gateBadPixelDark;
 	m_firmware = m_pFn->m_gateFirmwareBurn;
+	m_agingTest = m_pFn->m_gateAgingTest;
+	m_oven = m_pFn->m_gateOven;
+	m_agingGate = m_pFn->m_gateAgingGate;
+	m_agingVoltage = m_pFn->m_gateAgingVoltageI2c;
 
 	CString pathLine;
 	pathLine.Format(_T("%s"), (LPCTSTR)m_pFn->m_strGateSpecIniPath);
@@ -1614,9 +2075,87 @@ BOOL CDtSpecDlg::OnInitDialog()
 	m_edFwGrabIni.SetWindowText(m_firmware.grabIniAfterPowerCycle);
 	UpdateFirmwarePathLabel();
 
+	m_chkAgingEn.SetCheck(m_agingTest.enabled ? BST_CHECKED : BST_UNCHECKED);
+	m_chkAgingHeatStart.SetCheck(m_agingTest.heatAtStart ? BST_CHECKED : BST_UNCHECKED);
+	m_edOvenHost.SetWindowText(m_oven.host);
+	s.Format(_T("%d"), m_oven.port);
+	m_edOvenPort.SetWindowText(s);
+	s.Format(_T("%d"), m_oven.unitId);
+	m_edOvenUnit.SetWindowText(s);
+	s.Format(_T("%.1f"), m_oven.targetC);
+	m_edOvenTarget.SetWindowText(s);
+	s.Format(_T("%.1f"), m_oven.readyToleranceC);
+	m_edOvenTol.SetWindowText(s);
+	s.Format(_T("%d"), m_oven.waitTimeoutMin);
+	m_edOvenWait.SetWindowText(s);
+	s.Format(_T("%d"), m_oven.pollIntervalMs);
+	m_edOvenPoll.SetWindowText(s);
+	m_chkOvenDual.SetCheck(m_oven.dualChamber ? BST_CHECKED : BST_UNCHECKED);
+	s.Format(_T("%d"), m_oven.chamberD.regPv);
+	m_edOvenDPv.SetWindowText(s);
+	m_chkOvenCooldown.SetCheck(m_oven.cooldownEnabled ? BST_CHECKED : BST_UNCHECKED);
+	s.Format(_T("%.1f"), m_oven.cooldownTargetC);
+	m_edOvenCooldownTarget.SetWindowText(s);
+	s.Format(_T("%d"), m_oven.cooldownTimeoutMin);
+	m_edOvenCooldownTimeout.SetWindowText(s);
+	s.Format(_T("%.1f"), m_oven.cooldownToleranceC);
+	m_edOvenCooldownTol.SetWindowText(s);
+	int profSel = (int)m_oven.profile;
+	if (profSel < 0 || profSel > 2) profSel = 0;
+	m_cmbOvenProfile.SetCurSel(profSel);
+	int hmSel = 0;
+	if (m_oven.heatMode == OVEN_HEAT_U_ONLY) hmSel = 1;
+	else if (m_oven.heatMode == OVEN_HEAT_D_ONLY) hmSel = 2;
+	m_cmbOvenHeatMode.SetCurSel(hmSel);
+	ApplyOvenProfileToUi(m_oven.profile);
+	s.Format(_T("%d"), m_agingGate.durationMin);
+	m_edAgingDur.SetWindowText(s);
+	s.Format(_T("%d"), m_agingGate.sampleIntervalSec);
+	m_edAgingSample.SetWindowText(s);
+	FormatDouble(s, m_agingGate.limits.minSsrFps);
+	m_edAgingMinSsr.SetWindowText(s);
+	FormatDouble(s, m_agingGate.limits.maxSsrFps);
+	m_edAgingMaxSsr.SetWindowText(s);
+	FormatDouble(s, m_agingGate.limits.minCurrent_mA);
+	m_edAgingMinCur.SetWindowText(s);
+	FormatDouble(s, m_agingGate.limits.maxCurrent_mA);
+	m_edAgingMaxCur.SetWindowText(s);
+	FormatDouble(s, m_agingGate.limits.minSensorTemp_C);
+	m_edAgingMinTemp.SetWindowText(s);
+	FormatDouble(s, m_agingGate.limits.maxSensorTemp_C);
+	m_edAgingMaxTemp.SetWindowText(s);
+	FormatDouble(s, m_agingGate.minAvdd_V);
+	m_edAgingMinAvdd.SetWindowText(s);
+	FormatDouble(s, m_agingGate.maxAvdd_V);
+	m_edAgingMaxAvdd.SetWindowText(s);
+	FormatDouble(s, m_agingGate.minIovdd_V);
+	m_edAgingMinIovdd.SetWindowText(s);
+	FormatDouble(s, m_agingGate.maxIovdd_V);
+	m_edAgingMaxIovdd.SetWindowText(s);
+	FormatDouble(s, m_agingGate.minDvdd_V);
+	m_edAgingMinDvdd.SetWindowText(s);
+	FormatDouble(s, m_agingGate.maxDvdd_V);
+	m_edAgingMaxDvdd.SetWindowText(s);
+	m_chkAgingVoltEn.SetCheck(m_agingVoltage.enabled ? BST_CHECKED : BST_UNCHECKED);
+	s.Format(_T("%u"), m_agingVoltage.i2cMode);
+	m_edAgingVoltMode.SetWindowText(s);
+	FormatDouble(s, m_agingVoltage.scale);
+	m_edAgingVoltScale.SetWindowText(s);
+	FormatHex(s, m_agingVoltage.regAvdd, 4);
+	m_edAgingRegAvdd.SetWindowText(s);
+	FormatHex(s, m_agingVoltage.regAvddHigh, 4);
+	m_edAgingRegAvddH.SetWindowText(s);
+	FormatHex(s, m_agingVoltage.regIovdd, 4);
+	m_edAgingRegIovdd.SetWindowText(s);
+	FormatHex(s, m_agingVoltage.regIovddHigh, 4);
+	m_edAgingRegIovddH.SetWindowText(s);
+	FormatHex(s, m_agingVoltage.regDvdd, 4);
+	m_edAgingRegDvdd.SetWindowText(s);
+	FormatHex(s, m_agingVoltage.regDvddHigh, 4);
+	m_edAgingRegDvddH.SetWindowText(s);
+
 	UpdateFormulaText();
 	m_tab.SetCurSel(0);
-	m_specFrameReady = false;
 	ShowSpecPage(0);
 	UpdateBadPixelAlgoUi();
 	UpdateBadPixelSnapTypeUi();
@@ -1776,6 +2315,69 @@ void CDtSpecDlg::OnOK()
 		}
 	}
 	m_pFn->m_gateFirmwareBurn = m_firmware;
+
+	m_agingTest.enabled = (m_chkAgingEn.GetCheck() == BST_CHECKED);
+	m_agingTest.heatAtStart = (m_chkAgingHeatStart.GetCheck() == BST_CHECKED);
+	ReadOvenFromUi(&m_oven);
+	m_oven.enabled = true;
+	m_oven.profile = (OvenProfileId)m_cmbOvenProfile.GetCurSel();
+	if (m_oven.profile < 0 || m_oven.profile > OVEN_PROFILE_CUSTOM)
+		m_oven.profile = OVEN_PROFILE_S1200;
+	if (m_oven.profile != OVEN_PROFILE_CUSTOM)
+		OvenApplyProfileDefaults(m_oven.profile, &m_oven);
+	m_edAgingDur.GetWindowText(t);
+	m_agingGate.durationMin = _tstoi(t);
+	if (m_agingGate.durationMin < 1) m_agingGate.durationMin = 1;
+	m_edAgingSample.GetWindowText(t);
+	m_agingGate.sampleIntervalSec = _tstoi(t);
+	if (m_agingGate.sampleIntervalSec < 5) m_agingGate.sampleIntervalSec = 5;
+	m_edAgingMinSsr.GetWindowText(t);
+	m_agingGate.limits.minSsrFps = ParseDouble(t);
+	m_edAgingMaxSsr.GetWindowText(t);
+	m_agingGate.limits.maxSsrFps = ParseDouble(t);
+	m_edAgingMinCur.GetWindowText(t);
+	m_agingGate.limits.minCurrent_mA = ParseDouble(t);
+	m_edAgingMaxCur.GetWindowText(t);
+	m_agingGate.limits.maxCurrent_mA = ParseDouble(t);
+	m_edAgingMinTemp.GetWindowText(t);
+	m_agingGate.limits.minSensorTemp_C = ParseDouble(t);
+	m_edAgingMaxTemp.GetWindowText(t);
+	m_agingGate.limits.maxSensorTemp_C = ParseDouble(t);
+	m_edAgingMinAvdd.GetWindowText(t);
+	m_agingGate.minAvdd_V = ParseDouble(t);
+	m_edAgingMaxAvdd.GetWindowText(t);
+	m_agingGate.maxAvdd_V = ParseDouble(t);
+	m_edAgingMinIovdd.GetWindowText(t);
+	m_agingGate.minIovdd_V = ParseDouble(t);
+	m_edAgingMaxIovdd.GetWindowText(t);
+	m_agingGate.maxIovdd_V = ParseDouble(t);
+	m_edAgingMinDvdd.GetWindowText(t);
+	m_agingGate.minDvdd_V = ParseDouble(t);
+	m_edAgingMaxDvdd.GetWindowText(t);
+	m_agingGate.maxDvdd_V = ParseDouble(t);
+	m_agingVoltage.enabled = (m_chkAgingVoltEn.GetCheck() == BST_CHECKED);
+	m_edAgingVoltMode.GetWindowText(t);
+	m_agingVoltage.i2cMode = (unsigned char)_tstoi(t);
+	m_edAgingVoltScale.GetWindowText(t);
+	m_agingVoltage.scale = ParseDouble(t);
+	if (m_agingVoltage.scale < 1.0) m_agingVoltage.scale = 1000.0;
+	m_edAgingRegAvdd.GetWindowText(t);
+	m_agingVoltage.regAvdd = (unsigned short)ParseHexUint(t);
+	m_edAgingRegAvddH.GetWindowText(t);
+	m_agingVoltage.regAvddHigh = (unsigned short)ParseHexUint(t);
+	m_edAgingRegIovdd.GetWindowText(t);
+	m_agingVoltage.regIovdd = (unsigned short)ParseHexUint(t);
+	m_edAgingRegIovddH.GetWindowText(t);
+	m_agingVoltage.regIovddHigh = (unsigned short)ParseHexUint(t);
+	m_edAgingRegDvdd.GetWindowText(t);
+	m_agingVoltage.regDvdd = (unsigned short)ParseHexUint(t);
+	m_edAgingRegDvddH.GetWindowText(t);
+	m_agingVoltage.regDvddHigh = (unsigned short)ParseHexUint(t);
+	m_pFn->m_gateAgingTest = m_agingTest;
+	m_pFn->m_gateOven = m_oven;
+	m_pFn->m_gateAgingGate = m_agingGate;
+	m_pFn->m_gateAgingVoltageI2c = m_agingVoltage;
+
 	for (int d = 0; d < MAX_CC16 * MAX_DEV; d++)
 	{
 		for (int v = 0; v < MAX_VC; v++)
@@ -1891,6 +2493,16 @@ void CDtSpecDlg::UpdateBadPixelLabels()
 	}
 }
 
+void CDtSpecDlg::SetBadPixelAlgoMode(int algoMode)
+{
+	const int mode = (algoMode == 1) ? 1 : 0;
+	m_radBpNeighbor.SetCheck(mode == 0 ? BST_CHECKED : BST_UNCHECKED);
+	m_radBpHuawei.SetCheck(mode == 1 ? BST_CHECKED : BST_UNCHECKED);
+	m_radBpNeighbor.Invalidate(FALSE);
+	m_radBpHuawei.Invalidate(FALSE);
+	UpdateBadPixelAlgoUi();
+}
+
 void CDtSpecDlg::UpdateBadPixelAlgoUi()
 {
 	if (m_tab.GetSafeHwnd() == NULL || m_tab.GetCurSel() != 1)
@@ -1901,8 +2513,13 @@ void CDtSpecDlg::UpdateBadPixelAlgoUi()
 	UpdateBadPixelSnapTypeUi();
 }
 
-void CDtSpecDlg::OnBnClickedRadBpAlgo()
+void CDtSpecDlg::OnBnClickedRadBpNeighbor()
 {
-	UpdateBadPixelAlgoUi();
+	SetBadPixelAlgoMode(0);
+}
+
+void CDtSpecDlg::OnBnClickedRadBpHuawei()
+{
+	SetBadPixelAlgoMode(1);
 }
 

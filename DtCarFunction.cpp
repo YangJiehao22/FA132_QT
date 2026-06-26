@@ -1,6 +1,7 @@
 #include "StdAfx.h"
 #include <process.h>
 #include "DtCarFunction.h"
+#include "DtAgingGate.h"
 #include "DtChannelDlg.h"
 #include "DtLightTestReport.h"
 #include "DtHotPixelAlgo.h"
@@ -953,16 +954,16 @@ static bool YuvToGray8Safe(
 
 	if (IsYuv422Packed8(fmt) || fmt == FORMAT_YUV_10 || fmt == FORMAT_YUV_12)
 	{
-		if (DtkitYuv422ToGray8(srcPtr, rowStride, w, h, gray))
-		{
-			if (outPathTag != NULL)
-				*outPathTag = "dtkit_yuv_y";
-			return true;
-		}
 		if (Yuv422ExtractY8(srcPtr, useSrcBytes, w, h, rowStride, yuvFmt, gray))
 		{
 			if (outPathTag != NULL)
 				*outPathTag = IsYuv422Packed8(fmt) ? "yuv422_y8" : "yuv10_as_yuv8";
+			return true;
+		}
+		if (DtkitYuv422ToGray8(srcPtr, rowStride, w, h, gray))
+		{
+			if (outPathTag != NULL)
+				*outPathTag = "dtkit_yuv_y";
 			return true;
 		}
 	}
@@ -1657,6 +1658,7 @@ DtCarFunction::DtCarFunction()
 	m_iVcNum = 1;
 	m_iBoxType = Box_UC930;
 	InitializeCriticalSection(&m_csGrab);
+	InitializeCriticalSection(&m_csGrabDirect);
 	memset(m_hWndVideo, 0, sizeof(m_hWndVideo));
 	memset(m_workPowerReady, 0, sizeof(m_workPowerReady));
 	memset(m_workGrabReady, 0, sizeof(m_workGrabReady));
@@ -1684,6 +1686,7 @@ DtCarFunction::DtCarFunction()
 	m_bFirmwareBurnInProgress = false;
 	m_bPauseCaptureForBurn = false;
 	m_bSuppressWorkDraw = false;
+	m_bPausePreviewGrab = false;
 	memset(m_bFirmwareBurnPass, 0, sizeof(m_bFirmwareBurnPass));
 	memset(m_fwBurnErrCode, 0, sizeof(m_fwBurnErrCode));
 	m_bSensorIdHasResult = false;
@@ -1702,6 +1705,13 @@ DtCarFunction::DtCarFunction()
 	m_gateBadPixelDark = GateDefaultBadPixelDark();
 	m_gateFirmwareBurn = GateDefaultFirmwareBurn();
 	m_gateTcpNotify = GateDefaultTcpNotify();
+	m_gateAgingTest = GateDefaultAgingTest();
+	m_gateOven = GateDefaultOvenCfg();
+	m_gateAgingGate = GateDefaultAgingGate();
+	m_gateAgingVoltageI2c = GateDefaultAgingVoltageI2c();
+	m_bProductionDeferred = false;
+	m_deferredLightAllPass = false;
+	AgingInitAllChannels(this);
 	for (int d = 0; d < MAX_CC16 * MAX_DEV; d++)
 		InitializeCriticalSection(&m_csBurnDev[d]);
 
@@ -1720,6 +1730,8 @@ DtCarFunction::~DtCarFunction()
 {
 	for (int d = 0; d < MAX_CC16 * MAX_DEV; d++)
 		DeleteCriticalSection(&m_csBurnDev[d]);
+	DeleteCriticalSection(&m_csGrabDirect);
+	DeleteCriticalSection(&m_csGrab);
 	SaveDtCarIni();
 }
 
@@ -1728,6 +1740,11 @@ bool DtCarFunction::IsFirmwareBurnCellActive(int dev, int vc) const
 	if (!m_bFwBurnOverlay || dev < 0 || dev >= MAX_CC16 * MAX_DEV || vc < 0 || vc >= MAX_VC)
 		return false;
 	return m_fwBurnPct[dev][vc] >= 0;
+}
+
+bool DtCarFunction::IsAgingNgCell(int dev, int vc) const
+{
+	return AgingIsNgCell(this, dev, vc);
 }
 
 int DtCarFunction::GetFirmwareBurnPercent(int dev, int vc) const
@@ -1781,7 +1798,7 @@ int DtCarFunction::DrawImageOnUiThread(const DrawImage_t& di, int vcId, int devI
 		return DT_ERROR_OK;
 
 	/* Burning cell: WorkProc must not push live frames (see WorkProc). */
-	if (IsFirmwareBurnCellActive(devId, vcId))
+	if (IsFirmwareBurnCellActive(devId, vcId) || IsAgingNgCell(devId, vcId))
 		return DT_ERROR_OK;
 
 	DtUiDrawPack pack;
@@ -2239,16 +2256,49 @@ int DtCarFunction::ReadGateSpecIni()
 	GateIniFillFirmwareBurn(m_strGateSpecIniPath, GateDefaultFirmwareBurn(), &m_gateFirmwareBurn);
 	/* [tcp_notify] PeerHost/PeerPort -> lighting station TCP (see DtTcpNotify.cpp) */
 	GateIniFillTcpNotify(m_strGateSpecIniPath, GateDefaultTcpNotify(), &m_gateTcpNotify);
+	GateIniFillAgingTest(m_strGateSpecIniPath, GateDefaultAgingTest(), &m_gateAgingTest);
+	GateIniFillOvenCfg(m_strGateSpecIniPath, GateDefaultOvenCfg(), &m_gateOven);
+	GateIniFillAgingGate(m_strGateSpecIniPath, GateDefaultAgingGate(), m_gateDefault, &m_gateAgingGate);
+	GateIniFillAgingVoltageI2c(m_strGateSpecIniPath, GateDefaultAgingVoltageI2c(), &m_gateAgingVoltageI2c);
+
+	static struct GateSpecIniLogState {
+		CString iniPath;
+		bool fwEnabled;
+		bool fwReadSensorId;
+		bool tcpEnabled;
+		CString tcpHost;
+		int tcpPort;
+		bool initialized;
+		GateSpecIniLogState() : fwEnabled(false), fwReadSensorId(false),
+			tcpEnabled(false), tcpPort(0), initialized(false) {}
+	} s_iniLog;
+
+	const bool logFwTcp = !s_iniLog.initialized
+		|| s_iniLog.iniPath.Compare(m_strGateSpecIniPath) != 0
+		|| s_iniLog.fwEnabled != m_gateFirmwareBurn.enabled
+		|| s_iniLog.fwReadSensorId != m_gateFirmwareBurn.readSensorIdEnabled
+		|| s_iniLog.tcpEnabled != m_gateTcpNotify.enabled
+		|| s_iniLog.tcpPort != m_gateTcpNotify.peerPort
+		|| s_iniLog.tcpHost.Compare(m_gateTcpNotify.peerHost) != 0;
+	if (logFwTcp)
 	{
-		CStringA pathA(m_strGateSpecIniPath);
+		s_iniLog.initialized = true;
+		s_iniLog.iniPath = m_strGateSpecIniPath;
+		s_iniLog.fwEnabled = m_gateFirmwareBurn.enabled;
+		s_iniLog.fwReadSensorId = m_gateFirmwareBurn.readSensorIdEnabled;
+		s_iniLog.tcpEnabled = m_gateTcpNotify.enabled;
+		s_iniLog.tcpPort = m_gateTcpNotify.peerPort;
+		s_iniLog.tcpHost = m_gateTcpNotify.peerHost;
+
+		const CStringA pathUtf8 = WideToUtf8A(m_strGateSpecIniPath);
 		msgUtf8(DtZh::kLogGateSpecFw,
 			m_gateFirmwareBurn.enabled ? 1 : 0,
 			m_gateFirmwareBurn.readSensorIdEnabled ? 1 : 0,
-			(LPCSTR)pathA);
-		CStringA hostA(m_gateTcpNotify.peerHost);
+			pathUtf8.GetString());
+		const CStringA hostUtf8 = WideToUtf8A(m_gateTcpNotify.peerHost);
 		msgUtf8(DtZh::kLogGateSpecTcp,
 			m_gateTcpNotify.enabled ? 1 : 0,
-			hostA.GetString(), m_gateTcpNotify.peerPort);
+			hostUtf8.GetString(), m_gateTcpNotify.peerPort);
 	}
 	return 1;
 }
@@ -2549,6 +2599,8 @@ int DtCarFunction::SaveGateSpecIni()
 	const GateTcpNotifyCfg& tn = m_gateTcpNotify;
 	v.Format("%d", tn.enabled ? 1 : 0);
 	ReplaceTokenA(tplUtf8, "{{TCP_EN}}", v);
+	v.Format("%d", tn.closeBoxAfterTest ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{TCP_CLOSE_BOX}}", v);
 	{
 		CStringA hostA(tn.peerHost);
 		ReplaceTokenA(tplUtf8, "{{TCP_HOST}}", hostA);
@@ -2567,6 +2619,127 @@ int DtCarFunction::SaveGateSpecIni()
 	ReplaceTokenA(tplUtf8, "{{TCP_WAIT_RESP}}", v);
 	v.Format("%d", tn.recvTimeoutMs);
 	ReplaceTokenA(tplUtf8, "{{TCP_RECV_MS}}", v);
+
+	const GateAgingTestCfg& ag = m_gateAgingTest;
+	v.Format("%d", ag.enabled ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{AGING_EN}}", v);
+	v.Format("%d", ag.heatAtStart ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{AGING_HEAT_START}}", v);
+
+	const GateOvenCfg& ov = m_gateOven;
+	v.Format("%d", ov.enabled ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{OVEN_EN}}", v);
+	ReplaceTokenA(tplUtf8, "{{OVEN_PROFILE}}", CStringA(CT2A(OvenProfileIniString(ov.profile))));
+	ReplaceTokenA(tplUtf8, "{{OVEN_HOST}}", CStringA(CT2A(ov.host)));
+	v.Format("%d", ov.port);
+	ReplaceTokenA(tplUtf8, "{{OVEN_PORT}}", v);
+	v.Format("%d", ov.unitId);
+	ReplaceTokenA(tplUtf8, "{{OVEN_UNIT}}", v);
+	v.Format("%d", ov.tempScale);
+	ReplaceTokenA(tplUtf8, "{{OVEN_TEMP_SCALE}}", v);
+	v.Format("%.1f", ov.targetC);
+	ReplaceTokenA(tplUtf8, "{{OVEN_TARGET}}", v);
+	v.Format("%.1f", ov.readyToleranceC);
+	ReplaceTokenA(tplUtf8, "{{OVEN_TOL}}", v);
+	v.Format("%d", ov.waitTimeoutMin);
+	ReplaceTokenA(tplUtf8, "{{OVEN_WAIT_MIN}}", v);
+	v.Format("%d", ov.pollIntervalMs);
+	ReplaceTokenA(tplUtf8, "{{OVEN_POLL_MS}}", v);
+	v.Format("%d", ov.connectTimeoutMs);
+	ReplaceTokenA(tplUtf8, "{{OVEN_CONN_MS}}", v);
+	v.Format("%d", ov.ioTimeoutMs);
+	ReplaceTokenA(tplUtf8, "{{OVEN_IO_MS}}", v);
+	v.Format("%d", ov.retryCount);
+	ReplaceTokenA(tplUtf8, "{{OVEN_RETRY}}", v);
+	v.Format("%d", ov.dualChamber ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{OVEN_DUAL}}", v);
+	ReplaceTokenA(tplUtf8, "{{OVEN_HEAT_MODE}}", CStringA(CT2A(OvenHeatModeIniString(ov.heatMode))));
+	v.Format("%d", ov.cooldownEnabled ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{OVEN_COOLDOWN_EN}}", v);
+	v.Format("%.1f", ov.cooldownTargetC);
+	ReplaceTokenA(tplUtf8, "{{OVEN_COOLDOWN_TARGET}}", v);
+	v.Format("%.1f", ov.cooldownToleranceC);
+	ReplaceTokenA(tplUtf8, "{{OVEN_COOLDOWN_TOL}}", v);
+	v.Format("%d", ov.cooldownTimeoutMin);
+	ReplaceTokenA(tplUtf8, "{{OVEN_COOLDOWN_TIMEOUT}}", v);
+	v.Format("%d", ov.chamberU.regSetTemp);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_U_SET}}", v);
+	v.Format("%d", ov.chamberU.regStart);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_U_START}}", v);
+	v.Format("%d", ov.chamberU.regStop);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_U_STOP}}", v);
+	v.Format("%d", ov.chamberU.regPv);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_U_PV}}", v);
+	v.Format("%d", ov.chamberU.regRunState);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_U_RUN}}", v);
+	v.Format("%d", ov.chamberU.runStateBit);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_U_RUN_BIT}}", v);
+	v.Format("%d", ov.chamberU.regFault);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_U_FAULT}}", v);
+	v.Format("%d", ov.chamberD.regSetTemp);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_D_SET}}", v);
+	v.Format("%d", ov.chamberD.regStart);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_D_START}}", v);
+	v.Format("%d", ov.chamberD.regStop);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_D_STOP}}", v);
+	v.Format("%d", ov.chamberD.regPv);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_D_PV}}", v);
+	v.Format("%d", ov.chamberD.regRunState);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_D_RUN}}", v);
+	v.Format("%d", ov.chamberD.runStateBit);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_D_RUN_BIT}}", v);
+	v.Format("%d", ov.chamberD.regFault);
+	ReplaceTokenA(tplUtf8, "{{OVEN_REG_D_FAULT}}", v);
+
+	const GateAgingGateCfg& gg = m_gateAgingGate;
+	v.Format("%d", gg.durationMin);
+	ReplaceTokenA(tplUtf8, "{{AGING_DUR_MIN}}", v);
+	v.Format("%d", gg.sampleIntervalSec);
+	ReplaceTokenA(tplUtf8, "{{AGING_SAMPLE_SEC}}", v);
+	v.Format("%.3f", gg.limits.minSsrFps);
+	ReplaceTokenA(tplUtf8, "{{AGING_MIN_SSR}}", v);
+	v.Format("%.3f", gg.limits.maxSsrFps);
+	ReplaceTokenA(tplUtf8, "{{AGING_MAX_SSR}}", v);
+	v.Format("%.3f", gg.limits.minCurrent_mA);
+	ReplaceTokenA(tplUtf8, "{{AGING_MIN_CUR}}", v);
+	v.Format("%.3f", gg.limits.maxCurrent_mA);
+	ReplaceTokenA(tplUtf8, "{{AGING_MAX_CUR}}", v);
+	v.Format("%.3f", gg.limits.minSensorTemp_C);
+	ReplaceTokenA(tplUtf8, "{{AGING_MIN_TEMP}}", v);
+	v.Format("%.3f", gg.limits.maxSensorTemp_C);
+	ReplaceTokenA(tplUtf8, "{{AGING_MAX_TEMP}}", v);
+	v.Format("%.2f", gg.minAvdd_V);
+	ReplaceTokenA(tplUtf8, "{{AGING_MIN_AVDD}}", v);
+	v.Format("%.2f", gg.maxAvdd_V);
+	ReplaceTokenA(tplUtf8, "{{AGING_MAX_AVDD}}", v);
+	v.Format("%.2f", gg.minIovdd_V);
+	ReplaceTokenA(tplUtf8, "{{AGING_MIN_IOVDD}}", v);
+	v.Format("%.2f", gg.maxIovdd_V);
+	ReplaceTokenA(tplUtf8, "{{AGING_MAX_IOVDD}}", v);
+	v.Format("%.2f", gg.minDvdd_V);
+	ReplaceTokenA(tplUtf8, "{{AGING_MIN_DVDD}}", v);
+	v.Format("%.2f", gg.maxDvdd_V);
+	ReplaceTokenA(tplUtf8, "{{AGING_MAX_DVDD}}", v);
+
+	const GateAgingVoltageI2cCfg& av = m_gateAgingVoltageI2c;
+	v.Format("%d", av.enabled ? 1 : 0);
+	ReplaceTokenA(tplUtf8, "{{AGING_VOLT_EN}}", v);
+	v.Format("%u", av.i2cMode);
+	ReplaceTokenA(tplUtf8, "{{AGING_VOLT_MODE}}", v);
+	v.Format("0x%04X", av.regAvdd);
+	ReplaceTokenA(tplUtf8, "{{AGING_REG_AVDD}}", v);
+	v.Format("0x%04X", av.regAvddHigh);
+	ReplaceTokenA(tplUtf8, "{{AGING_REG_AVDD_H}}", v);
+	v.Format("0x%04X", av.regIovdd);
+	ReplaceTokenA(tplUtf8, "{{AGING_REG_IOVDD}}", v);
+	v.Format("0x%04X", av.regIovddHigh);
+	ReplaceTokenA(tplUtf8, "{{AGING_REG_IOVDD_H}}", v);
+	v.Format("0x%04X", av.regDvdd);
+	ReplaceTokenA(tplUtf8, "{{AGING_REG_DVDD}}", v);
+	v.Format("0x%04X", av.regDvddHigh);
+	ReplaceTokenA(tplUtf8, "{{AGING_REG_DVDD_H}}", v);
+	v.Format("%.1f", av.scale);
+	ReplaceTokenA(tplUtf8, "{{AGING_VOLT_SCALE}}", v);
 
 	const CStringA iniAcp = Utf8ToAcp(tplUtf8, tplUtf8.GetLength());
 	if (!WriteAcpIniFile(path, iniAcp))
@@ -2635,6 +2808,9 @@ void DtCarFunction::ClearLightGateResults()
 	memset(m_sensorTempC, 0, sizeof(m_sensorTempC));
 	m_bFirmwareBurnVerifyHasResult = false;
 	memset(m_bFirmwareBurnVerifyPass, 0, sizeof(m_bFirmwareBurnVerifyPass));
+	m_bProductionDeferred = false;
+	m_deferredProductionRows.clear();
+	AgingInitAllChannels(this);
 }
 
 bool DtCarFunction::AnySensorIdReadFailed() const
@@ -2672,7 +2848,7 @@ static void CacheSensorLaneTemp(DtCarFunction* fn, int dev, int vc,
 		return;
 	double tempC = 0.0;
 	const bool ok = Sony031ReadSensorTempC(dev, vc, fwCfg, slaveHint,
-		fn->m_gateSensorTempI2c, &tempC);
+		fn->m_gateSensorTempI2c, &tempC, false);
 	fn->m_hasSensorTemp[dev][vc] = ok;
 	fn->m_sensorTempC[dev][vc] = ok ? tempC : 0.0;
 }
@@ -2762,6 +2938,47 @@ static void PumpUiWhileJoining()
 	}
 }
 
+/** Wait for worker threads without blocking the UI message loop (log + draw). */
+static void WaitHandlesPumpUi(std::vector<HANDLE>& handles)
+{
+	const DWORD sliceMs = 50;
+	while (!handles.empty())
+	{
+		DWORD n = (DWORD)handles.size();
+		if (n > MAXIMUM_WAIT_OBJECTS)
+			n = MAXIMUM_WAIT_OBJECTS;
+
+		const DWORD w = MsgWaitForMultipleObjects(n, handles.data(), FALSE, sliceMs, QS_ALLINPUT);
+		if (w >= WAIT_OBJECT_0 && w < WAIT_OBJECT_0 + n)
+		{
+			const size_t idx = (size_t)(w - WAIT_OBJECT_0);
+			::CloseHandle(handles[idx]);
+			handles.erase(handles.begin() + idx);
+		}
+		else if (w == WAIT_OBJECT_0 + n)
+			PumpUiWhileJoining();
+		else if (w == WAIT_TIMEOUT)
+			PumpUiWhileJoining();
+	}
+}
+
+struct LightTestPausePreviewScope
+{
+	DtCarFunction* fn;
+	bool active;
+	explicit LightTestPausePreviewScope(DtCarFunction* f)
+		: fn(f), active(f != NULL && f->m_bRunning)
+	{
+		if (active)
+			fn->m_bPausePreviewGrab = true;
+	}
+	~LightTestPausePreviewScope()
+	{
+		if (active && fn != NULL)
+			fn->m_bPausePreviewGrab = false;
+	}
+};
+
 /** Wait until WorkProc exits; only then CloseHandle. Uses MsgWait + UI pump. */
 static bool JoinWorkThread(DtCarFunction* fn, int devId, DWORD warnAfterMs)
 {
@@ -2802,7 +3019,8 @@ static void LogFirmwareBurnSummary(DtCarFunction* fn, bool allPass)
 {
 	if (fn == NULL)
 		return;
-	msgUtf8(allPass ? DtZh::kFwSummaryAllOk : DtZh::kFwSummaryNg);
+	int total = 0;
+	int ok = 0;
 	for (int d = 0; d < fn->m_iEnumDevNum; d++)
 	{
 		if (!fn->IsDevEnabled(d))
@@ -2811,8 +3029,26 @@ static void LogFirmwareBurnSummary(DtCarFunction* fn, bool allPass)
 		{
 			if (!fn->IsVcEnabled(d, v))
 				continue;
-			const bool chOk = fn->m_bFirmwareBurnPass[d][v];
-			msgUtf8(DtZh::kFwSummaryCh, d, v, chOk ? DtZh::kStrPass : DtZh::kStrFail);
+			total++;
+			if (fn->m_bFirmwareBurnPass[d][v])
+				ok++;
+		}
+	}
+	msgUtf8(DtZh::kLogFwSummaryCount, ok, total);
+	if (!allPass)
+	{
+		for (int d = 0; d < fn->m_iEnumDevNum; d++)
+		{
+			if (!fn->IsDevEnabled(d))
+				continue;
+			for (int v = 0; v < fn->m_iVcNum; v++)
+			{
+				if (!fn->IsVcEnabled(d, v))
+					continue;
+				if (fn->m_bFirmwareBurnPass[d][v])
+					continue;
+				msgUtf8(DtZh::kFwSummaryCh, d, v, DtZh::kStrFail);
+			}
 		}
 	}
 }
@@ -2898,18 +3134,6 @@ static void MarkVcFirmwareBurnFailed(DtCarFunction* fn, int devId, int vcId, int
 	FirmwareBurnReportProgress(devId, vcId, 100);
 }
 
-static int FirmwareChipPhaseCount(const GateFirmwareBurnCfg& cfg)
-{
-	return cfg.fa132DualChip ? 2 : 1;
-}
-
-static bool VcOnFirmwareChipPhase(int vcId, int chipPhase, const GateFirmwareBurnCfg& cfg)
-{
-	if (!cfg.fa132DualChip)
-		return chipPhase == 0;
-	return FirmwareChipIdForVc(vcId, cfg) == chipPhase;
-}
-
 static void JoinFirmwareWorkerThreads(std::vector<HANDLE>& handles)
 {
 	for (size_t i = 0; i < handles.size(); i++)
@@ -2971,9 +3195,7 @@ bool DtCarFunction::RunSensorIdReadParallel()
 	}
 
 	if (readId)
-		msgUtf8(DtZh::kFwSensorIdStart);
-	if (readTemp)
-		msgUtf8(DtZh::kFwSensorTempStart);
+		msgUtf8(DtZh::kLogPhaseSensorId);
 	for (int chipPhase = 0; chipPhase < chipPhases; chipPhase++)
 	{
 		if (fwCfg.fa132DualChip)
@@ -3026,6 +3248,8 @@ bool DtCarFunction::RunSensorIdReadParallel()
 	}
 
 	bool idAllPass = true;
+	int idTotal = 0;
+	int idOk = 0;
 	if (readId)
 	{
 		for (int d = 0; d < m_iEnumDevNum; d++)
@@ -3036,15 +3260,35 @@ bool DtCarFunction::RunSensorIdReadParallel()
 			{
 				if (!IsVcEnabled(d, v))
 					continue;
-				if (!m_bSensorIdReadOk[d][v])
+				idTotal++;
+				if (m_bSensorIdReadOk[d][v])
+					idOk++;
+				else
 					idAllPass = false;
 			}
 		}
+		msgUtf8(DtZh::kLogSensorIdSummary, idOk, idTotal);
 		if (!idAllPass)
+		{
+			for (int d = 0; d < m_iEnumDevNum; d++)
+			{
+				if (!IsDevEnabled(d))
+					continue;
+				for (int v = 0; v < m_iVcNum; v++)
+				{
+					if (!IsVcEnabled(d, v))
+						continue;
+					if (!m_bSensorIdReadOk[d][v])
+						msgUtf8(DtZh::kLogSensorIdNgCh, d, v);
+				}
+			}
 			msgUtf8(DtZh::kFwSensorIdParallelFail);
+		}
 	}
 
 	bool tempAllPass = true;
+	int tempTotal = 0;
+	int tempOk = 0;
 	if (readTemp)
 	{
 		for (int d = 0; d < m_iEnumDevNum; d++)
@@ -3055,12 +3299,30 @@ bool DtCarFunction::RunSensorIdReadParallel()
 			{
 				if (!IsVcEnabled(d, v))
 					continue;
-				if (!m_hasSensorTemp[d][v])
+				tempTotal++;
+				if (m_hasSensorTemp[d][v])
+					tempOk++;
+				else
 					tempAllPass = false;
 			}
 		}
+		msgUtf8(DtZh::kLogSensorTempSummary, tempOk, tempTotal);
 		if (!tempAllPass)
+		{
+			for (int d = 0; d < m_iEnumDevNum; d++)
+			{
+				if (!IsDevEnabled(d))
+					continue;
+				for (int v = 0; v < m_iVcNum; v++)
+				{
+					if (!IsVcEnabled(d, v))
+						continue;
+					if (!m_hasSensorTemp[d][v])
+						msgUtf8(DtZh::kLogSensorTempNgCh, d, v);
+				}
+			}
 			msgUtf8(DtZh::kFwSensorTempParallelFail);
+		}
 	}
 	return true;
 }
@@ -3162,8 +3424,6 @@ bool DtCarFunction::RunFirmwareBurnParallel(bool afterStart)
 		{
 			if (!IsDevEnabled(d) || !devBurnReady[d])
 				continue;
-			if (chipPhase == 0)
-				msgUtf8(DtZh::kLogFwBurnDev, d, d);
 			for (int v = 0; v < m_iVcNum; v++)
 			{
 				if (!IsVcEnabled(d, v))
@@ -3222,7 +3482,8 @@ static void LogFirmwareVerifySummary(DtCarFunction* fn, bool allPass)
 {
 	if (fn == NULL)
 		return;
-	msgUtf8(allPass ? DtZh::kFwVerifySummaryOk : DtZh::kFwVerifySummaryNg);
+	int total = 0;
+	int ok = 0;
 	for (int d = 0; d < fn->m_iEnumDevNum; d++)
 	{
 		if (!fn->IsDevEnabled(d))
@@ -3231,8 +3492,26 @@ static void LogFirmwareVerifySummary(DtCarFunction* fn, bool allPass)
 		{
 			if (!fn->IsVcEnabled(d, v))
 				continue;
-			const bool chOk = fn->m_bFirmwareBurnVerifyPass[d][v];
-			msgUtf8(DtZh::kFwVerifySummaryCh, d, v, chOk ? DtZh::kStrPass : DtZh::kStrFail);
+			total++;
+			if (fn->m_bFirmwareBurnVerifyPass[d][v])
+				ok++;
+		}
+	}
+	msgUtf8(DtZh::kLogFwVerifySummaryCount, ok, total);
+	if (!allPass)
+	{
+		for (int d = 0; d < fn->m_iEnumDevNum; d++)
+		{
+			if (!fn->IsDevEnabled(d))
+				continue;
+			for (int v = 0; v < fn->m_iVcNum; v++)
+			{
+				if (!fn->IsVcEnabled(d, v))
+					continue;
+				if (fn->m_bFirmwareBurnVerifyPass[d][v])
+					continue;
+				msgUtf8(DtZh::kFwVerifySummaryCh, d, v, DtZh::kStrFail);
+			}
 		}
 	}
 }
@@ -3253,24 +3532,28 @@ bool DtCarFunction::PrepareForFirmwareVerify()
 	}
 
 	bool allOk = true;
+	int powerOk = 0;
+	int powerFail = 0;
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
 		if (!IsDevEnabled(i) || !m_grabTabValid[i])
 			continue;
 		const int iRet = ::carInitPower(i);
-		msgUtf8(DtZh::kLogDevInitPower, i, iRet);
 		if (iRet != DT_ERROR_OK)
 		{
+			powerFail++;
 			allOk = false;
+			msgUtf8(DtZh::kLogDevInitPower, i, iRet);
 			m_workPowerReady[i] = false;
 			m_workGrabReady[i] = false;
 			continue;
 		}
+		powerOk++;
 		m_workPowerReady[i] = true;
 		m_workGrabReady[i] = false;
 	}
 
-	msgUtf8(DtZh::kFwVerifyPrepPower);
+	msgUtf8(DtZh::kLogInitPowerVerify, powerOk, powerFail);
 	return allOk;
 }
 
@@ -3330,8 +3613,6 @@ bool DtCarFunction::RunFirmwareBurnVerifyAll()
 				}
 				continue;
 			}
-			if (chipPhase == 0)
-				msgUtf8(DtZh::kLogFwVerifyDev, d, d);
 			for (int v = 0; v < m_iVcNum; v++)
 			{
 				if (!IsVcEnabled(d, v))
@@ -3457,12 +3738,27 @@ CString DtCarFunction::BuildProductionOutputDir(const CTime& time) const
 	return dir;
 }
 
-void DtCarFunction::EnsureProductionSessionDir()
+void DtCarFunction::EnsureProductionSessionDir(bool forProductionRunStart)
 {
+	const CTime sessionTime = CTime::GetCurrentTime();
+	const CString targetDir = BuildProductionOutputDir(sessionTime);
+
+	if (forProductionRunStart)
+	{
+		if (m_lightTestSessionDir.CompareNoCase(targetDir) != 0)
+		{
+			m_lightTestSessionDir = targetDir;
+			::SHCreateDirectoryEx(NULL, m_lightTestSessionDir, NULL);
+		}
+		m_lightTestSessionTag.Format(_T("%04d%02d%02d_%02d%02d%02d"),
+			sessionTime.GetYear(), sessionTime.GetMonth(), sessionTime.GetDay(),
+			sessionTime.GetHour(), sessionTime.GetMinute(), sessionTime.GetSecond());
+		return;
+	}
+
 	if (!m_lightTestSessionDir.IsEmpty())
 		return;
-	const CTime sessionTime = CTime::GetCurrentTime();
-	m_lightTestSessionDir = BuildProductionOutputDir(sessionTime);
+	m_lightTestSessionDir = targetDir;
 	m_lightTestSessionTag.Format(_T("%04d%02d%02d_%02d%02d%02d"),
 		sessionTime.GetYear(), sessionTime.GetMonth(), sessionTime.GetDay(),
 		sessionTime.GetHour(), sessionTime.GetMinute(), sessionTime.GetSecond());
@@ -3621,6 +3917,7 @@ void DtCarFunction::LogProductionRunStart()
 {
 	m_dwProductionRunStartTick = GetTickCount();
 	m_bProductionRunActive = TRUE;
+	EnsureProductionSessionDir(true);
 
 	const CTime now = CTime::GetCurrentTime();
 	CStringA chA;
@@ -3639,8 +3936,13 @@ void DtCarFunction::LogProductionRunStart()
 		fw.fwWarmupMs);
 	if (m_strGateSpecIniPath.GetLength() > 0)
 	{
-		CStringA iniA(m_strGateSpecIniPath);
+		const CStringA iniA = WideToUtf8A(m_strGateSpecIniPath);
 		msgUtf8(DtZh::kProdRunIniPath, (LPCSTR)iniA);
+	}
+	if (!m_lightTestSessionDir.IsEmpty())
+	{
+		const CStringA sessionA = WideToUtf8A(m_lightTestSessionDir);
+		msgUtf8(DtZh::kProdRunSessionDir, (LPCSTR)sessionA);
 	}
 }
 
@@ -3668,7 +3970,7 @@ void DtCarFunction::LogProductionRunEnd(int failStage, bool allPass)
 	if (!m_lightTestSessionDir.IsEmpty())
 	{
 		CString csvPath = m_lightTestSessionDir + _T("Production_report.csv");
-		CStringA csvA(csvPath);
+		const CStringA csvA = WideToUtf8A(csvPath);
 		msgUtf8(DtZh::kProdRunCsvPath, (LPCSTR)csvA);
 	}
 }
@@ -3701,10 +4003,122 @@ bool DtCarFunction::FinalizeProductionRun(int failStage,
 
 	LogProductionRunEnd(summaryStage, allPass);
 
-	/* After CSV: async Play to PeerHost (NG still sends unless OnlyOnOverallOk=1) */
-	TcpNotifyPostTestDoneAsync(m_gateTcpNotify, allPass);
-
 	return allPass;
+}
+
+bool DtCarFunction::StoreGrabFrameInCache(int devId, int vcId, const DtImage_t& grabImg)
+{
+	if (devId < 0 || devId >= MAX_CC16 * MAX_DEV || vcId < 0 || vcId >= MAX_VC)
+		return false;
+	if (grabImg.data == NULL || grabImg.width < 1 || grabImg.height < 1)
+		return false;
+
+	const GrabTab* pTab = m_grabTabValid[devId] ? &m_grabTab[devId] : NULL;
+	const unsigned copyRaw = GrabPayloadBytes(grabImg);
+	if (copyRaw == 0)
+		return false;
+
+	std::vector<unsigned char> rawCopy(grabImg.data, grabImg.data + copyRaw);
+	const IMAGE_FORMAT imgFormat = grabImg.format;
+	const RAW_FORMAT rawFmt = ResolveRawFmt(grabImg, pTab, m_gateBadPixelDark.bayerPattern);
+	const YUV_FORMAT yuvFmt = ResolveYuvFmt(grabImg, pTab);
+	const unsigned rowStride = GrabRowStrideBytes(grabImg);
+
+	msgUtf8(DtZh::kGrabOk, devId, vcId, (int)imgFormat, copyRaw, rowStride, (int)yuvFmt);
+	if (IsRawBayerFormat(imgFormat) || imgFormat == FORMAT_MIPI_RAW12 || imgFormat == FORMAT_P12)
+	{
+		const int iniPat = (pTab != NULL) ? (pTab->sensor.outformat % 4) : -1;
+		msgUtf8(DtZh::kGrabRawFmt, devId, vcId,
+			(int)grabImg.rawFmt, iniPat, (int)rawFmt, m_gateBadPixelDark.bayerPattern);
+	}
+
+	std::vector<unsigned char> gray;
+	unsigned int outW = 0;
+	unsigned int outH = 0;
+	bool bayerRaster = false;
+	DtImage_t grabForGray = grabImg;
+	grabForGray.rawFmt = rawFmt;
+	const bool grayOk = TransformGrabToGray8(grabForGray, pTab, devId, gray, outW, outH, bayerRaster);
+	if (!grayOk)
+		msgUtf8(DtZh::kGrabGraySkip, devId, vcId, (int)imgFormat);
+
+	EnterCriticalSection(&m_csGrab);
+	VcGrayCache& slot = m_grayCache[devId][vcId];
+	if (grayOk)
+		slot.pixels = gray;
+	else
+		slot.pixels.clear();
+	slot.rawPixels = rawCopy;
+	slot.width = grayOk ? outW : grabImg.width;
+	slot.height = grayOk ? outH : grabImg.height;
+	slot.rawFormat = imgFormat;
+	slot.rawFmt = rawFmt;
+	slot.yuvFmt = yuvFmt;
+	slot.rawDataSize = (unsigned)rawCopy.size();
+	slot.rawRowStride = rowStride;
+	slot.bayerRaster = bayerRaster;
+	slot.valid = !rawCopy.empty();
+	LeaveCriticalSection(&m_csGrab);
+	return slot.valid;
+}
+
+bool DtCarFunction::CollectBadPixelFramesForDev(int devId)
+{
+	if (devId < 0 || devId >= MAX_CC16 * MAX_DEV || !m_bRunning || m_bSuppressWorkDraw)
+		return false;
+
+	bool needVc[MAX_VC] = {};
+	int needCount = 0;
+	const int vcNum = (m_iVcNum > 0 && m_iVcNum <= MAX_VC) ? m_iVcNum : 1;
+	for (int v = 0; v < vcNum; v++)
+	{
+		if (!IsVcEnabled(devId, v))
+			continue;
+		needVc[v] = true;
+		needCount++;
+		EnterCriticalSection(&m_csGrab);
+		m_grayCache[devId][v].valid = false;
+		m_grayCache[devId][v].pixels.clear();
+		m_grayCache[devId][v].rawPixels.clear();
+		LeaveCriticalSection(&m_csGrab);
+	}
+	if (needCount <= 0)
+		return true;
+
+	bool filledVc[MAX_VC] = {};
+	int filledCount = 0;
+	int tries = 0;
+	const DWORD deadline = GetTickCount() + 800;
+	const int maxTries = (vcNum > 1) ? (vcNum * 16) : 8;
+
+	while (filledCount < needCount && tries < maxTries && GetTickCount() < deadline
+		&& m_bRunning && !m_bSuppressWorkDraw)
+	{
+		DtImage_t grabImg = {};
+		int grabVc = 0;
+		int iRet = DT_ERROR_FAILED;
+		EnterCriticalSection(&m_csGrabDirect);
+		iRet = ::carGrabFrameDirect(&grabImg, &grabVc, devId);
+		LeaveCriticalSection(&m_csGrabDirect);
+		tries++;
+
+		if (iRet != DT_ERROR_OK || grabImg.data == NULL
+			|| grabImg.width < 1 || grabImg.height < 1)
+			continue;
+		if (grabVc < 0 || grabVc >= MAX_VC || !needVc[grabVc])
+			continue;
+		if (filledVc[grabVc])
+			continue;
+
+		if (StoreGrabFrameInCache(devId, grabVc, grabImg))
+		{
+			filledVc[grabVc] = true;
+			filledCount++;
+		}
+	}
+
+	msgUtf8(DtZh::kLogBpCollectDev, devId, filledCount, needCount, tries);
+	return filledCount >= needCount;
 }
 
 bool DtCarFunction::GrabFrameDirectOwned(int devId, int vcId,
@@ -3729,63 +4143,33 @@ bool DtCarFunction::GrabFrameDirectOwned(int devId, int vcId,
 		return false;
 	}
 
-	const GrabTab* pTab = m_grabTabValid[devId] ? &m_grabTab[devId] : NULL;
-
 	DtImage_t grabImg = {};
 	int grabVc = vcId;
-	const int iRet = ::carGrabFrameDirect(&grabImg, &grabVc, devId);
+	int iRet = DT_ERROR_FAILED;
+	EnterCriticalSection(&m_csGrabDirect);
+	iRet = ::carGrabFrameDirect(&grabImg, &grabVc, devId);
+	LeaveCriticalSection(&m_csGrabDirect);
 
 	bool ok = false;
-	EnterCriticalSection(&m_csGrab);
 	if (iRet == DT_ERROR_OK && grabImg.data != NULL
 		&& grabImg.width >= 1 && grabImg.height >= 1
 		&& (grabVc == vcId || m_iVcNum <= 1))
 	{
-		const unsigned copyRaw = GrabPayloadBytes(grabImg);
-		const unsigned rowStride = GrabRowStrideBytes(grabImg);
-
-		if (copyRaw > 0)
-			rawCopy.assign(grabImg.data, grabImg.data + copyRaw);
-
-		imgFormat = grabImg.format;
-		rawFmt = ResolveRawFmt(grabImg, pTab, m_gateBadPixelDark.bayerPattern);
-		yuvFmt = ResolveYuvFmt(grabImg, pTab);
-
-		msgUtf8(DtZh::kGrabOk, devId, vcId, (int)imgFormat, copyRaw, rowStride, (int)yuvFmt);
-		if (IsRawBayerFormat(imgFormat) || imgFormat == FORMAT_MIPI_RAW12 || imgFormat == FORMAT_P12)
+		ok = StoreGrabFrameInCache(devId, vcId, grabImg);
+		if (ok)
 		{
-			const int iniPat = (pTab != NULL) ? (pTab->sensor.outformat % 4) : -1;
-			msgUtf8(DtZh::kGrabRawFmt, devId, vcId,
-				(int)grabImg.rawFmt, iniPat, (int)rawFmt, m_gateBadPixelDark.bayerPattern);
-		}
-
-		ok = true;
-		DtImage_t grabForGray = grabImg;
-		grabForGray.rawFmt = rawFmt;
-		const bool grayOk = TransformGrabToGray8(grabForGray, pTab, devId, gray, outW, outH, bayerRaster);
-		if (!grayOk)
-			msgUtf8(DtZh::kGrabGraySkip, devId, vcId, (int)imgFormat);
-
-		{
-			VcGrayCache& slot = m_grayCache[devId][vcId];
-			if (grayOk)
-				slot.pixels = gray;
-			else
-				slot.pixels.clear();
-			slot.rawPixels = rawCopy;
-			slot.width = grayOk ? outW : grabImg.width;
-			slot.height = grayOk ? outH : grabImg.height;
-			slot.rawFormat = imgFormat;
-			slot.rawFmt = rawFmt;
-			slot.yuvFmt = yuvFmt;
-			slot.rawDataSize = (unsigned)rawCopy.size();
-			slot.rawRowStride = rowStride;
-			slot.bayerRaster = bayerRaster;
-			slot.valid = !rawCopy.empty();
+			EnterCriticalSection(&m_csGrab);
+			gray = m_grayCache[devId][vcId].pixels;
+			rawCopy = m_grayCache[devId][vcId].rawPixels;
+			outW = m_grayCache[devId][vcId].width;
+			outH = m_grayCache[devId][vcId].height;
+			imgFormat = m_grayCache[devId][vcId].rawFormat;
+			rawFmt = m_grayCache[devId][vcId].rawFmt;
+			yuvFmt = m_grayCache[devId][vcId].yuvFmt;
+			bayerRaster = m_grayCache[devId][vcId].bayerRaster;
+			LeaveCriticalSection(&m_csGrab);
 		}
 	}
-
-	LeaveCriticalSection(&m_csGrab);
 
 	if (!ok)
 	{
@@ -3946,19 +4330,12 @@ void DtCarFunction::SaveBadPixelSnapshots(int devId, int vcId, bool pass,
 				bmpSaved = true;
 			}
 		}
-		if (!bmpSaved && IsYuvFormat(imgFormat) && rowStride >= w * 2)
-		{
-			std::vector<unsigned char> rgb;
-			if (DtkitYuv422ToRgb24(rawCopy.data(), rowStride, w, h, frameYuvFmt, rgb)
-				&& WriteRgb24BmpFile(fileBmpA.GetString(), rgb.data(), w, h))
-			{
-				msgUtf8(DtZh::kBpSnapBmpYuv, fileBmpA.GetString(), (int)frameYuvFmt);
-				bmpSaved = true;
-			}
-		}
 		if (!bmpSaved && !gray.empty() && WriteGray8BmpFile(fileBmpA.GetString(), gray.data(), w, h))
 		{
-			msgUtf8(DtZh::kBpSnapBmpGray, fileBmpA.GetString());
+			if (IsYuvFormat(imgFormat))
+				msgUtf8(DtZh::kBpSnapBmpYuv, fileBmpA.GetString(), (int)frameYuvFmt);
+			else
+				msgUtf8(DtZh::kBpSnapBmpGray, fileBmpA.GetString());
 			bmpSaved = true;
 		}
 		if (bmpSaved)
@@ -4114,41 +4491,12 @@ bool DtCarFunction::GrabFrameGray8(int devId, int vcId, std::vector<unsigned cha
 	return false;
 }
 
-bool DtCarFunction::RunDarkFieldBadPixelCheck(int devId, int vcId, BadPixelDarkResult* outResult,
+bool DtCarFunction::RunDarkFieldBadPixelAnalyze(int devId, int vcId,
+	const std::vector<unsigned char>& gray, unsigned int w, unsigned int h,
+	const std::vector<unsigned char>& frameRaw, IMAGE_FORMAT grabFmt, RAW_FORMAT rawFmt,
+	YUV_FORMAT yuvFmt, bool bayerRaster, BadPixelDarkResult* outResult,
 	CString* outBmpPath, CString* outRawUnpackedPath)
 {
-	if (outResult != NULL)
-		*outResult = BadPixelDarkResult();
-
-	if (!m_gateBadPixelDark.enabled)
-	{
-		if (outResult != NULL)
-		{
-			outResult->analyzed = false;
-			outResult->pass = true;
-		}
-		return true;
-	}
-
-	std::vector<unsigned char> gray;
-	std::vector<unsigned char> frameRaw;
-	unsigned int w = 0;
-	unsigned int h = 0;
-	IMAGE_FORMAT grabFmt = FORMAT_RAW8;
-	RAW_FORMAT rawFmt = RAW_RGGB;
-	YUV_FORMAT yuvFmt = YUV_YCBYCR;
-	bool bayerRaster = false;
-	if (!GrabFrameDirectOwned(devId, vcId, gray, w, h, frameRaw, grabFmt, rawFmt, yuvFmt, bayerRaster))
-	{
-		msgUtf8(DtZh::kBpGrabFail, devId, vcId);
-		if (outResult != NULL)
-		{
-			outResult->analyzed = false;
-			outResult->pass = false;
-		}
-		return false;
-	}
-
 	BadPixelDarkResult r = {};
 	HotPixelHuaweiDetail hwDetail = {};
 	bool huaweiP12Domain = false;
@@ -4166,7 +4514,7 @@ bool DtCarFunction::RunDarkFieldBadPixelCheck(int devId, int vcId, BadPixelDarkR
 			const char* p12Tag = NULL;
 			bool haveP12 = false;
 			DtImage_t grabMeta = MakeOwnedSnapImage(grabFmt, rawFmt, yuvFmt, w, h,
-				frameRaw.data(), (unsigned)frameRaw.size());
+				const_cast<unsigned char*>(frameRaw.data()), (unsigned)frameRaw.size());
 			const unsigned rowStride = GrabRowStrideBytes(grabMeta);
 			if (grabFmt == FORMAT_MIPI_RAW12)
 				haveP12 = MipiRaw12ToP12(frameRaw.data(), (unsigned)frameRaw.size(), w, h, rowStride, p12, &p12Tag);
@@ -4261,6 +4609,116 @@ bool DtCarFunction::RunDarkFieldBadPixelCheck(int devId, int vcId, BadPixelDarkR
 	return r.pass;
 }
 
+bool DtCarFunction::RunDarkFieldBadPixelCheckFromCache(int devId, int vcId, BadPixelDarkResult* outResult,
+	CString* outBmpPath, CString* outRawUnpackedPath)
+{
+	if (outResult != NULL)
+		*outResult = BadPixelDarkResult();
+
+	if (!m_gateBadPixelDark.enabled)
+	{
+		if (outResult != NULL)
+		{
+			outResult->analyzed = false;
+			outResult->pass = true;
+		}
+		return true;
+	}
+
+	std::vector<unsigned char> gray;
+	std::vector<unsigned char> frameRaw;
+	unsigned int w = 0;
+	unsigned int h = 0;
+	IMAGE_FORMAT grabFmt = FORMAT_RAW8;
+	RAW_FORMAT rawFmt = RAW_RGGB;
+	YUV_FORMAT yuvFmt = YUV_YCBYCR;
+	bool bayerRaster = false;
+
+	EnterCriticalSection(&m_csGrab);
+	const VcGrayCache& slot = m_grayCache[devId][vcId];
+	const bool ready = slot.valid && !slot.rawPixels.empty();
+	if (ready)
+	{
+		gray = slot.pixels;
+		frameRaw = slot.rawPixels;
+		w = slot.width;
+		h = slot.height;
+		grabFmt = slot.rawFormat;
+		rawFmt = slot.rawFmt;
+		yuvFmt = slot.yuvFmt;
+		bayerRaster = slot.bayerRaster;
+	}
+	LeaveCriticalSection(&m_csGrab);
+
+	if (!ready || w < 1 || h < 1)
+	{
+		msgUtf8(DtZh::kBpCacheMiss, devId, vcId);
+		if (outResult != NULL)
+		{
+			outResult->analyzed = false;
+			outResult->pass = false;
+		}
+		return false;
+	}
+
+	return RunDarkFieldBadPixelAnalyze(devId, vcId, gray, w, h, frameRaw, grabFmt, rawFmt, yuvFmt,
+		bayerRaster, outResult, outBmpPath, outRawUnpackedPath);
+}
+
+bool DtCarFunction::RunDarkFieldBadPixelCheck(int devId, int vcId, BadPixelDarkResult* outResult,
+	CString* outBmpPath, CString* outRawUnpackedPath)
+{
+	if (outResult != NULL)
+		*outResult = BadPixelDarkResult();
+
+	if (!m_gateBadPixelDark.enabled)
+	{
+		if (outResult != NULL)
+		{
+			outResult->analyzed = false;
+			outResult->pass = true;
+		}
+		return true;
+	}
+
+	std::vector<unsigned char> gray;
+	std::vector<unsigned char> frameRaw;
+	unsigned int w = 0;
+	unsigned int h = 0;
+	IMAGE_FORMAT grabFmt = FORMAT_RAW8;
+	RAW_FORMAT rawFmt = RAW_RGGB;
+	YUV_FORMAT yuvFmt = YUV_YCBYCR;
+	bool bayerRaster = false;
+	if (!GrabFrameDirectOwned(devId, vcId, gray, w, h, frameRaw, grabFmt, rawFmt, yuvFmt, bayerRaster))
+	{
+		msgUtf8(DtZh::kBpGrabFail, devId, vcId);
+		if (outResult != NULL)
+		{
+			outResult->analyzed = false;
+			outResult->pass = false;
+		}
+		return false;
+	}
+
+	return RunDarkFieldBadPixelAnalyze(devId, vcId, gray, w, h, frameRaw, grabFmt, rawFmt, yuvFmt,
+		bayerRaster, outResult, outBmpPath, outRawUnpackedPath);
+}
+
+struct DtBadPixelCollectParam
+{
+	DtCarFunction* fn;
+	int devId;
+};
+
+unsigned __stdcall DtCarFunction::BadPixelCollectDevThreadProc(void* p)
+{
+	DtBadPixelCollectParam* tp = (DtBadPixelCollectParam*)p;
+	if (tp == NULL || tp->fn == NULL)
+		return 1;
+	tp->fn->CollectBadPixelFramesForDev(tp->devId);
+	return 0;
+}
+
 struct DtLightGateThreadParam
 {
 	DtCarFunction* fn;
@@ -4306,7 +4764,7 @@ static bool RunLightGateOneChannel(DtCarFunction* fn, int d, int v,
 	CString bmpPath;
 	CString rawPath;
 	if (fn->m_gateBadPixelDark.enabled)
-		okBadPx = fn->RunDarkFieldBadPixelCheck(d, v, &bpRes, &bmpPath, &rawPath);
+		okBadPx = fn->RunDarkFieldBadPixelCheckFromCache(d, v, &bpRes, &bmpPath, &rawPath);
 
 	const bool okFwBurn = (!fn->m_gateFirmwareBurn.enabled || !fn->m_bFirmwareBurnHasResult
 		|| fn->m_bFirmwareBurnPass[d][v]);
@@ -4434,8 +4892,9 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 {
 	ReadGateSpecIni();
 
-	CStringA specA(m_strGateSpecIniPath);
+	const CStringA specA = WideToUtf8A(m_strGateSpecIniPath);
 	msgUtf8(DtZh::kLogLtIni, specA.GetString());
+	msgUtf8(DtZh::kLogPhaseLt);
 	msgUtf8(DtZh::kLogLtDelay,
 		m_specDelayMs,
 		m_gateDefault.minSsrFps, m_gateDefault.maxSsrFps,
@@ -4472,19 +4931,55 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 
 	EnsureProductionSessionDir();
 
+	LightTestPausePreviewScope pausePreview(this);
+
+	if (m_gateBadPixelDark.enabled && m_bRunning)
+	{
+		msgUtf8(DtZh::kLogBpCollectPhase);
+		std::vector<HANDLE> collectThreads;
+		std::vector<DtBadPixelCollectParam*> collectParams;
+		for (int d = 0; d < m_iEnumDevNum; d++)
+		{
+			if (!IsDevEnabled(d))
+				continue;
+			bool anyVc = false;
+			for (int v = 0; v < m_iVcNum; v++)
+			{
+				if (IsVcEnabled(d, v))
+				{
+					anyVc = true;
+					break;
+				}
+			}
+			if (!anyVc)
+				continue;
+
+			DtBadPixelCollectParam* cp = new DtBadPixelCollectParam;
+			cp->fn = this;
+			cp->devId = d;
+			unsigned threadId = 0;
+			HANDLE h = (HANDLE)_beginthreadex(NULL, 0, &DtCarFunction::BadPixelCollectDevThreadProc, cp, 0, &threadId);
+			if (h == NULL)
+			{
+				CollectBadPixelFramesForDev(d);
+				delete cp;
+				continue;
+			}
+			collectThreads.push_back(h);
+			collectParams.push_back(cp);
+		}
+		WaitHandlesPumpUi(collectThreads);
+		for (size_t i = 0; i < collectParams.size(); i++)
+			delete collectParams[i];
+	}
+
 	std::vector<HANDLE> threads;
 	std::vector<DtLightGateThreadParam*> params;
-	bool loggedDev[MAX_CC16 * MAX_DEV] = {};
 
 	for (int d = 0; d < m_iEnumDevNum; d++)
 	{
 		if (!IsDevEnabled(d))
 			continue;
-		if (!loggedDev[d])
-		{
-			msgUtf8(DtZh::kLtParallelDev, d);
-			loggedDev[d] = true;
-		}
 		for (int v = 0; v < m_iVcNum; v++)
 		{
 			if (!IsVcEnabled(d, v))
@@ -4508,16 +5003,13 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 		}
 	}
 
-	for (size_t i = 0; i < threads.size(); i++)
-	{
-		WaitForSingleObject(threads[i], INFINITE);
-		CloseHandle(threads[i]);
-	}
+	WaitHandlesPumpUi(threads);
 
 	if (!params.empty())
 		qsort(params.data(), params.size(), sizeof(DtLightGateThreadParam*), LightGateParamOrder);
 
 	bool allPass = true;
+	int passCount = 0;
 	std::vector<LightTestChannelRecord> reportRows;
 	reportRows.reserve(params.size());
 	for (size_t i = 0; i < params.size(); i++)
@@ -4527,15 +5019,84 @@ bool DtCarFunction::RunLightGatePerChannelReport()
 			continue;
 		if (!tp->pass)
 			allPass = false;
+		else
+			passCount++;
 		reportRows.push_back(tp->rec);
-		LogLightGateChannelLine(this, tp->rec);
 		delete tp;
 	}
 
-	FinalizeProductionRun(PROD_STAGE_LIGHT, reportRows, allPass);
+	const int totalCh = (int)reportRows.size();
+	if (allPass)
+		msgUtf8(DtZh::kLogLtSummaryOk, passCount, totalCh);
+	else
+	{
+		msgUtf8(DtZh::kLogLtSummaryNg, passCount, totalCh);
+		for (size_t i = 0; i < reportRows.size(); i++)
+		{
+			if (!reportRows[i].overallPass)
+				LogLightGateChannelLine(this, reportRows[i]);
+		}
+	}
+
+	if (m_gateAgingTest.enabled)
+	{
+		m_deferredProductionRows = reportRows;
+		m_deferredLightAllPass = allPass;
+		m_bProductionDeferred = true;
+		AgingMarkSkipFromLightTest(this);
+		msgUtf8(DtZh::kAgingWaitOven);
+	}
+	else
+	{
+		FinalizeProductionRun(PROD_STAGE_LIGHT, reportRows, allPass);
+	}
 	if (!allPass)
 		msgUtf8(DtZh::kLtParallelFail);
 	return allPass;
+}
+
+static void SummarizeProductionRows(
+	const std::vector<LightTestChannelRecord>& rows,
+	bool* outAllPass,
+	int* outFailStage)
+{
+	bool allPass = !rows.empty();
+	int failStage = PROD_STAGE_OK;
+	for (size_t i = 0; i < rows.size(); i++)
+	{
+		const LightTestChannelRecord& r = rows[i];
+		if (r.overallPass)
+			continue;
+		allPass = false;
+		if (r.failStage != PROD_STAGE_OK)
+		{
+			failStage = r.failStage;
+			break;
+		}
+	}
+	if (!allPass && failStage == PROD_STAGE_OK)
+		failStage = PROD_STAGE_LIGHT;
+	if (outAllPass != NULL)
+		*outAllPass = allPass;
+	if (outFailStage != NULL)
+		*outFailStage = failStage;
+}
+
+bool DtCarFunction::FinalizeDeferredProductionWithAging()
+{
+	if (!m_bProductionDeferred || m_deferredProductionRows.empty())
+		return false;
+	AgingAppendReportRows(this, m_deferredProductionRows);
+
+	bool allPass = true;
+	int failStage = PROD_STAGE_OK;
+	SummarizeProductionRows(m_deferredProductionRows, &allPass, &failStage);
+	AgingLogEndSummary(this, allPass);
+
+	const bool ok = FinalizeProductionRun(failStage, m_deferredProductionRows, allPass);
+	m_deferredProductionRows.clear();
+	m_bProductionDeferred = false;
+	return ok;
 }
 
 // Worker thread entry
@@ -4704,17 +5265,17 @@ int DtCarFunction::Open() {
 	bool devOpened[MAX_CC16 * MAX_DEV] = {};
 	memset(devOpened, 0, sizeof(devOpened));
 	int openedCount = 0;
+	int skippedCount = 0;
 
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
 		m_grabTabValid[i] = false;
 		if (!IsDevEnabled(i))
 		{
-			msg("DevID %d: skipped (disabled in channel selection)\n", i);
+			skippedCount++;
 			continue;
 		}
 		GrabTab pGrabTab;
-		msgUtf8(DtZh::kLogGrabTab, i, (int)sizeof(GrabTab));
 		iRet = ::carLoadGrabPara(m_strSensorIniPath.GetBuffer(), i);
 		m_strSensorIniPath.ReleaseBuffer();
 		if (iRet != DT_ERROR_OK)
@@ -4727,7 +5288,6 @@ int DtCarFunction::Open() {
 		{
 			m_grabTab[i] = pGrabTab;
 			m_grabTabValid[i] = true;
-			msgUtf8(DtZh::kLogSensorFmt, i, (unsigned)pGrabTab.sensor.outformat);
 		}
 		else
 		{
@@ -4741,7 +5301,6 @@ int DtCarFunction::Open() {
 		{
 			devOpened[i] = true;
 			openedCount++;
-			msgUtf8(DtZh::kLogOpenOk, i, m_cDeviceName[i]);
 		}
 		else
 			msgUtf8(DtZh::kLogOpenFail, i, m_cDeviceName[i], iRet);
@@ -4752,6 +5311,7 @@ int DtCarFunction::Open() {
 		msgUtf8(DtZh::kOpenNoDevReady);
 		return 0;
 	}
+	msgUtf8(DtZh::kLogOpenSummary, openedCount, skippedCount);
 
 	CommonSetting_t tCommonSetting;
 	for (int i = 0; i < m_iEnumDevNum; i++)
@@ -4806,7 +5366,8 @@ bool DtCarFunction::InitWorkCapture(int devId)
 	{
 		const int lr = ::carLoadGrabPara(m_strSensorIniPath.GetBuffer(), devId);
 		m_strSensorIniPath.ReleaseBuffer();
-		msgUtf8(DtZh::kLogDevReloadGrabPara, devId, lr);
+		if (lr != DT_ERROR_OK)
+			msgUtf8(DtZh::kLogDevReloadGrabPara, devId, lr);
 		if (lr == DT_ERROR_OK)
 		{
 			GrabTab pGrabTab;
@@ -4823,9 +5384,9 @@ bool DtCarFunction::InitWorkCapture(int devId)
 	if (!hadPowerBefore)
 	{
 		const int pwrRet = ::carInitPower(devId);
-		msgUtf8(DtZh::kLogDevInitPower, devId, pwrRet);
 		if (pwrRet != DT_ERROR_OK)
 		{
+			msgUtf8(DtZh::kLogDevInitPower, devId, pwrRet);
 			m_workGrabInitTick[devId] = ::GetTickCount();
 			m_workGrabInitDone[devId] = true;
 			NotifyPreviewStreamRefresh();
@@ -4835,9 +5396,9 @@ bool DtCarFunction::InitWorkCapture(int devId)
 	}
 
 	const int iRet = ::carInitGrab(devId);
-	msgUtf8(DtZh::kLogDevInitGrab, devId, iRet);
 	if (iRet != DT_ERROR_OK)
 	{
+		msgUtf8(DtZh::kLogDevInitGrab, devId, iRet);
 		UninitWorkCapture(devId, true);
 		m_workGrabInitTick[devId] = ::GetTickCount();
 		m_workGrabInitDone[devId] = true;
@@ -4869,13 +5430,19 @@ void DtCarFunction::UninitWorkCapture(int devId, bool unitPower)
 
 void DtCarFunction::RestartGrabForLightTest()
 {
+	int okCount = 0;
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
 		if (!IsDevEnabled(i) || !m_workGrabReady[i])
 			continue;
 		const int iRet = ::carGrabRestart(0.0, 0, i);
-		msgUtf8(DtZh::kLogDevGrabRestart, i, iRet);
+		if (iRet == DT_ERROR_OK)
+			okCount++;
+		else
+			msgUtf8(DtZh::kLogDevGrabRestart, i, iRet);
 	}
+	if (okCount > 0)
+		msgUtf8(DtZh::kLogGrabRestartSummary, okCount);
 }
 
 bool DtCarFunction::ReloadGrabParaAfterPowerCycle()
@@ -4942,6 +5509,7 @@ bool DtCarFunction::ReloadGrabParaAfterPowerCycle()
 void DtCarFunction::RequestStopCapture()
 {
 	m_bSuppressWorkDraw = true;
+	int unitGrabCount = 0;
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
 		if (!IsDevEnabled(i))
@@ -4953,9 +5521,11 @@ void DtCarFunction::RequestStopCapture()
 		{
 			::carUnitGrab(i);
 			m_workGrabReady[i] = false;
-			msgUtf8(DtZh::kLogWorkRequestStop, i);
+			unitGrabCount++;
 		}
 	}
+	if (unitGrabCount > 0)
+		msgUtf8(DtZh::kLogWorkStopSummary, unitGrabCount);
 }
 
 struct DtFirmwarePrepThreadParam
@@ -5051,6 +5621,7 @@ int DtCarFunction::StartFirmwarePrep()
 		msgUtf8(DtZh::kNoChannelEnabled);
 		return 0;
 	}
+	msgUtf8(DtZh::kLogInitCaptureOk, started, (int)params.size());
 	msgUtf8(DtZh::kFwPrepInitOnly);
 	return 1;
 }
@@ -5109,6 +5680,7 @@ int DtCarFunction::Stop() {
 	m_bRunning = FALSE;
 	m_bPauseCaptureForBurn = false;
 	m_bSuppressWorkDraw = false;
+	m_bPausePreviewGrab = false;
 	for (int i = 0; i < m_iEnumDevNum; i++)
 	{
 		if (!IsDevEnabled(i) || m_hThread[i] == NULL)
@@ -5128,8 +5700,6 @@ int DtCarFunction::Stop() {
 
 void DtCarFunction::WorkProc(int iDevID)
 {
-	msgUtf8(DtZh::kLogWorkProcEnter, m_cDeviceName[iDevID] ? m_cDeviceName[iDevID] : "?");
-
 	if (!m_grabTabValid[iDevID])
 	{
 		msgUtf8(DtZh::kLogWorkProcSkip, iDevID);
@@ -5152,6 +5722,12 @@ void DtCarFunction::WorkProc(int iDevID)
 		if (!m_bRunning || m_bSuppressWorkDraw)
 			break;
 
+		if (m_bPausePreviewGrab)
+		{
+			Sleep(10);
+			continue;
+		}
+
 		const int curCnt = (m_iVcNum > 0 && m_iVcNum <= MAX_VC) ? m_iVcNum : 1;
 		int pmuCur[MAX_VC] = { 0 };
 		::carGetPmuCurrent(pmuCur, curCnt, iDevID);
@@ -5162,8 +5738,9 @@ void DtCarFunction::WorkProc(int iDevID)
 			break;
 
 		int grabVc = 0;
-		/* Do not hold m_csGrab across carGrabFrameDirect (SDK may block ~15s). */
+		EnterCriticalSection(&m_csGrabDirect);
 		iRet = ::carGrabFrameDirect(&grabImg, &grabVc, iDevID);
+		LeaveCriticalSection(&m_csGrabDirect);
 
 		if (!m_bRunning || m_bSuppressWorkDraw)
 			break;
@@ -5225,12 +5802,11 @@ void DtCarFunction::WorkProc(int iDevID)
 			LeaveCriticalSection(&m_csGrab);
 
 			if (doDraw && m_bRunning && !m_bSuppressWorkDraw
-				&& !IsFirmwareBurnCellActive(iDevID, iVcID))
+				&& !IsFirmwareBurnCellActive(iDevID, iVcID) && !IsAgingNgCell(iDevID, iVcID))
 				DrawImageOnUiThread(tDrawImage, iVcID, iDevID);
 		}
 	}
 	/* Uninit only on Stop()/Close() after thread join — avoids double carUnitGrab (0xC0000008). */
-	msgUtf8(DtZh::kLogWorkProcExit, m_cDeviceName[iDevID]);
 }
 
 void DtCarFunction::ShowI2cDebug(int uCurSel)

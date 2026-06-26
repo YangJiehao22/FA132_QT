@@ -6,6 +6,7 @@
 #include "Resource.h"
 #include "DtFileOperate.h"
 #include "I2CDebug.h"
+#include "DtGateLimits.h"
 
 #include "ezCarDTCCM_SDK/ezCarDTCCM.h"
 
@@ -36,21 +37,12 @@ struct DtUiDrawPack
 	int devId;
 };
 
-/** Limits for light test (GateSpec.ini): sensor fps, current mA, sensor temp */
-struct GateChannelLimits
-{
-	double minSsrFps;
-	double maxSsrFps;
-	double minCurrent_mA;
-	double maxCurrent_mA;
-	double minSensorTemp_C;
-	double maxSensorTemp_C;
-};
-
 #include "DtBadPixelDetect.h"
 #include "DtLightTestReport.h"
 #include "DtFirmwareBurn.h"
 #include "DtTcpNotify.h"
+#include "DtOvenModbus.h"
+#include "DtAgingGate.h"
 
 /** I2C read + generic formula for sensor temperature (GateSpec.ini [sensor_temp_i2c]). */
 struct GateSensorTempI2c
@@ -73,7 +65,8 @@ bool Sony031ReadSensorTempC(
 	const GateFirmwareBurnCfg& laneCfg,
 	unsigned char slaveHint,
 	const GateSensorTempI2c& tempCfg,
-	double* outTempC);
+	double* outTempC,
+	bool logOk = false);
 
 class DtCarFunction : public CWnd
 {
@@ -146,6 +139,8 @@ public:
 
 	BOOL    m_bRunning;				/* WorkProc loop flag */
 	bool    m_bSuppressWorkDraw;	/* Stop requested: no SendMessage draw, GrabHold ASAP */
+	/** LightTest bad-pixel: WorkProc skips carGrabFrameDirect only (preview may pause briefly). */
+	bool    m_bPausePreviewGrab;
 	bool    m_bPauseCaptureForBurn;	/* pause grab for firmware burn; keep power/grab init */
 	bool    m_workPowerReady[MAX_CC16 * MAX_DEV];
 	bool    m_workGrabReady[MAX_CC16 * MAX_DEV];
@@ -172,6 +167,16 @@ public:
 	GateFirmwareBurnCfg m_gateFirmwareBurn;
 	/** GateSpec.ini [tcp_notify]: TCP client to lighting station (Play after production). */
 	GateTcpNotifyCfg m_gateTcpNotify;
+	/** [aging_test] master switch + [oven] / [aging_gate] / [aging_voltage_i2c]. */
+	GateAgingTestCfg m_gateAgingTest;
+	GateOvenCfg m_gateOven;
+	GateAgingGateCfg m_gateAgingGate;
+	GateAgingVoltageI2cCfg m_gateAgingVoltageI2c;
+	AgingChannelState m_agingState[MAX_CC16 * MAX_DEV][MAX_VC];
+	/** Light-test rows held until aging completes (aging_test.Enabled=1). */
+	std::vector<LightTestChannelRecord> m_deferredProductionRows;
+	bool m_bProductionDeferred;
+	bool m_deferredLightAllPass;
 
 	int LoadIni();
 	int ReadDtCarIni();
@@ -216,6 +221,8 @@ public:
 	bool IsFirmwareBurnOverlayActive() const { return m_bFwBurnOverlay; }
 	bool IsFirmwareBurnInProgress() const { return m_bFirmwareBurnInProgress; }
 	bool IsFirmwareBurnCellActive(int dev, int vc) const;
+	/** Aging monitor: freeze live preview on first-NG cell (aging_test.Enabled=1). */
+	bool IsAgingNgCell(int dev, int vc) const;
 	int GetFirmwareBurnPercent(int dev, int vc) const;
 	void SetFirmwareBurnPercent(int dev, int vc, int pct);
 	void ClearFirmwareBurnUiState();
@@ -223,6 +230,8 @@ public:
 
 	/** Parallel light test per enabled Dev/VC (SsrFps/Cur/Temp/BadPx/Fw). */
 	bool RunLightGatePerChannelReport();
+	/** After aging: merge aging fields and write Production_report.csv. */
+	bool FinalizeDeferredProductionWithAging();
 	/** Unified UI + Production_report.csv for burn/verify abort or light-test completion. */
 	bool FinalizeProductionRun(int failStage);
 	bool FinalizeProductionRun(int failStage, const std::vector<LightTestChannelRecord>& rows, bool allPass);
@@ -267,6 +276,9 @@ public:
 	bool GrabFrameGray8(int devId, int vcId, std::vector<unsigned char>& gray, unsigned int& outW, unsigned int& outH);
 	bool RunDarkFieldBadPixelCheck(int devId, int vcId, BadPixelDarkResult* outResult,
 		CString* outBmpPath = NULL, CString* outRawUnpackedPath = NULL);
+	/** LightTest phase-B: analyze from m_grayCache filled by CollectBadPixelFramesForDev. */
+	bool RunDarkFieldBadPixelCheckFromCache(int devId, int vcId, BadPixelDarkResult* outResult,
+		CString* outBmpPath = NULL, CString* outRawUnpackedPath = NULL);
 
 	void WorkProc(int iDevID);
 
@@ -290,6 +302,8 @@ protected:
 	};
 
 	CRITICAL_SECTION m_csGrab;
+	/** Serializes carGrabFrameDirect (SDK is not safe for parallel multi-VC grab). */
+	CRITICAL_SECTION m_csGrabDirect;
 	CRITICAL_SECTION m_csBurnDev[MAX_CC16 * MAX_DEV];
 	HWND m_hwndFirmwareBurnProgress;
 	bool m_bFwBurnOverlay;
@@ -299,6 +313,15 @@ protected:
 	VcGrayCache m_grayCache[MAX_CC16 * MAX_DEV][MAX_VC];
 
 	void UpdateGrayCacheFromGrab(int devId, int vcId, const DtImage_t& grabImg);
+	/** Copy one SDK grab into m_grayCache[devId][vcId] (thread-safe). */
+	bool StoreGrabFrameInCache(int devId, int vcId, const DtImage_t& grabImg);
+	/** One thread per Dev: grab until all enabled VCs on dev have a frame or timeout. */
+	bool CollectBadPixelFramesForDev(int devId);
+	bool RunDarkFieldBadPixelAnalyze(int devId, int vcId,
+		const std::vector<unsigned char>& gray, unsigned int w, unsigned int h,
+		const std::vector<unsigned char>& frameRaw, IMAGE_FORMAT grabFmt, RAW_FORMAT rawFmt,
+		YUV_FORMAT yuvFmt, bool bayerRaster, BadPixelDarkResult* outResult,
+		CString* outBmpPath, CString* outRawUnpackedPath);
 	/** carGrabFrameDirect + copy raw (SDK reuses buffer on next grab). */
 	bool GrabFrameDirectOwned(int devId, int vcId,
 		std::vector<unsigned char>& gray, unsigned int& outW, unsigned int& outH,
@@ -310,7 +333,8 @@ protected:
 		const std::vector<unsigned char>* frameRaw = NULL, IMAGE_FORMAT frameFmt = FORMAT_RAW8,
 		RAW_FORMAT frameRawFmt = RAW_RGGB, YUV_FORMAT frameYuvFmt = YUV_YCBYCR);
 	CString BuildProductionOutputDir(const CTime& time) const;
-	void EnsureProductionSessionDir();
+	/** forProductionRunStart: bind dir to today's date (rollover at midnight); refresh run tag each Start. */
+	void EnsureProductionSessionDir(bool forProductionRunStart = false);
 	void WriteProductionReport(const std::vector<LightTestChannelRecord>& rows, bool allPass) const;
 	void BuildProductionRowsFromFirmware(int failStage, std::vector<LightTestChannelRecord>& outRows, bool& outAllPass) const;
 	void ApplyProductionRowsToUi(const std::vector<LightTestChannelRecord>& rows);
@@ -318,6 +342,7 @@ protected:
 	static unsigned __stdcall FirmwareSensorIdThreadProc(void* pParam);
 	static unsigned __stdcall FirmwareVerifyThreadProc(void* pParam);
 	static unsigned __stdcall LightGateThreadProc(void* pParam);
+	static unsigned __stdcall BadPixelCollectDevThreadProc(void* pParam);
 
 	CString m_lightTestSessionDir;
 	CString m_lightTestSessionTag;

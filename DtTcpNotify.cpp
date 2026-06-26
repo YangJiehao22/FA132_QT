@@ -203,6 +203,7 @@ GateTcpNotifyCfg GateDefaultTcpNotify()
 {
 	GateTcpNotifyCfg c = {};
 	c.enabled = false;
+	c.closeBoxAfterTest = false;
 	_tcsncpy_s(c.peerHost, _T("127.0.0.1"), _TRUNCATE);
 	c.peerPort = 9000;
 	c.onlyOnOverallOk = false;
@@ -221,6 +222,7 @@ void GateIniFillTcpNotify(LPCTSTR path, const GateTcpNotifyCfg& fb, GateTcpNotif
 	const TCHAR* sec = _T("tcp_notify");
 	*out = fb;
 	out->enabled = (GateIniIntLocal(path, sec, _T("Enabled"), fb.enabled ? 1 : 0) != 0);
+	out->closeBoxAfterTest = (GateIniIntLocal(path, sec, _T("CloseBoxAfterTest"), fb.closeBoxAfterTest ? 1 : 0) != 0);
 	{
 		CString host = GetIniFileString(sec, _T("PeerHost"), fb.peerHost, path);
 		host.Trim();

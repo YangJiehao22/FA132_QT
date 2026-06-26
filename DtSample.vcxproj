@@ -232,6 +232,8 @@ if exist "$(ProjectDir)GateSpec.template.utf8" copy /Y "$(ProjectDir)GateSpec.te
     <ClInclude Include="DtHotPixelAlgo.h" />
     <ClInclude Include="DtLightTestReport.h" />
     <ClInclude Include="DtTcpNotify.h" />
+    <ClInclude Include="DtOvenModbus.h" />
+    <ClInclude Include="DtAgingGate.h" />
     <ClInclude Include="DtCarFunction.h" />
     <ClInclude Include="DtFileOperate.h" />
     <ClInclude Include="DtSpecDlg.h" />
@@ -252,9 +254,12 @@ if exist "$(ProjectDir)GateSpec.template.utf8" copy /Y "$(ProjectDir)GateSpec.te
     <ClCompile Include="DtHotPixelAlgo.cpp" />
     <ClCompile Include="DtLightTestReport.cpp" />
     <ClCompile Include="DtTcpNotify.cpp" />
+    <ClCompile Include="DtOvenModbus.cpp" />
+    <ClCompile Include="DtAgingGate.cpp" />
     <ClCompile Include="DtCarFunction.cpp" />
     <ClCompile Include="DtFirmwareBurn.cpp" />
     <ClCompile Include="DtSpecDlg.cpp" />
+    <ClCompile Include="DtSpecDlgAging.cpp" />
     <ClCompile Include="DtChannelDlg.cpp" />
     <ClCompile Include="DtFileOperate.cpp" />
     <ClCompile Include="DtSample.cpp" />

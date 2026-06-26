@@ -9,6 +9,7 @@ const char* ProductionFailStageTag(int stage)
 	case PROD_STAGE_VERIFY: return "VERIFY";
 	case PROD_STAGE_LIGHT: return "LIGHT";
 	case PROD_STAGE_SENSOR_ID: return "SENSOR_ID";
+	case PROD_STAGE_AGING: return "AGING";
 	case PROD_STAGE_OK:
 	default: return "OK";
 	}
@@ -71,6 +72,19 @@ static const char* FwResultTag(bool enabled, bool tested, bool ok)
 	if (!tested)
 		return "SKIP";
 	return ok ? "OK" : "NG";
+}
+
+static const char* AgingResultTag(const LightTestChannelRecord& r)
+{
+	if (!r.agingEnabled)
+		return "N/A";
+	switch (r.agingResult)
+	{
+	case AGING_CSV_SKIP: return "SKIP";
+	case AGING_CSV_OK: return "OK";
+	case AGING_CSV_NG: return "NG";
+	default: return "N/A";
+	}
 }
 
 } // namespace
@@ -145,6 +159,14 @@ bool WriteProductionReportCsv(
 			AppendCsvField(hdr, "BadPixelResult", &first);
 			AppendCsvField(hdr, "ImageBmp", &first);
 			AppendCsvField(hdr, "ImageRawUnpacked", &first);
+			AppendCsvField(hdr, "AgingResult", &first);
+			AppendCsvField(hdr, "AgingSsrFps", &first);
+			AppendCsvField(hdr, "AgingCur_mA", &first);
+			AppendCsvField(hdr, "AgingTemp_C", &first);
+			AppendCsvField(hdr, "AgingAvdd_mV", &first);
+			AppendCsvField(hdr, "AgingIovdd_mV", &first);
+			AppendCsvField(hdr, "AgingDvdd_mV", &first);
+			AppendCsvField(hdr, "AgingFailReason", &first);
 			writeLine(hdr);
 		}
 
@@ -264,6 +286,30 @@ bool WriteProductionReportCsv(
 			}
 			AppendCsvField(line, CStringA(r.imageBmp), &first);
 			AppendCsvField(line, CStringA(r.imageRawUnpacked), &first);
+			AppendCsvField(line, AgingResultTag(r), &first);
+			if (r.agingResult == AGING_CSV_OK || r.agingResult == AGING_CSV_NG)
+			{
+				AppendCsvDouble(line, r.agingSsrFps, &first);
+				AppendCsvDouble(line, r.agingCurrent_mA, &first);
+				if (r.agingHasTemp)
+					AppendCsvDouble(line, r.agingTempC, &first);
+				else
+					AppendCsvField(line, "N/A", &first);
+				AppendCsvDouble(line, r.agingAvdd_mV, &first);
+				AppendCsvDouble(line, r.agingIovdd_mV, &first);
+				AppendCsvDouble(line, r.agingDvdd_mV, &first);
+				AppendCsvField(line, CStringA(r.agingFailReason), &first);
+			}
+			else
+			{
+				AppendCsvField(line, "", &first);
+				AppendCsvField(line, "", &first);
+				AppendCsvField(line, "", &first);
+				AppendCsvField(line, "", &first);
+				AppendCsvField(line, "", &first);
+				AppendCsvField(line, "", &first);
+				AppendCsvField(line, "", &first);
+			}
 			writeLine(line);
 		}
 

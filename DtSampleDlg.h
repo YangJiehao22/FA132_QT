@@ -135,6 +135,33 @@ public:
 	/** STREAM_GATE phase-2: wait after I2C before sampling fps for light test. */
 	BOOL m_bLightTestAfterI2cSettle;
 
+	/** Aging flow after light test (aging_test.Enabled=1). */
+	BOOL m_bAgingFlowActive;
+	BOOL m_bCooldownActive;
+	BOOL m_bOvenHeatInvolved;
+	BOOL m_bAgingDataFinalized;
+	int m_agingElapsedSec;
+	DWORD m_agingWaitStartTick;
+	DWORD m_agingMonitorStartTick;
+	DWORD m_agingCooldownStartTick;
+	bool m_bAgingFinalAllPass;
+	BOOL m_bCooldownLogStarted;
+	DWORD m_lastCooldownLogTick;
+	int m_lastAgingProgressLogMin;
+
+	void BeginOvenHeatIfNeeded();
+	void BeginAgingAfterLightTest();
+	void FinalizeAgingProductionData(bool ovenFault);
+	void BeginOvenCooldownAfterAging(bool ovenFault);
+	void CompleteAgingRunUi();
+	void FinishAgingProductionRun(bool ovenFault);
+	void OnOvenWaitTimer();
+	void OnAgingSampleTimer();
+	void OnOvenCooldownTimer();
+	void UpdateAgingProgressTitle();
+	bool ShouldShowAgingMonitor() const;
+	static unsigned __stdcall OvenHeatWorkerProc(void* param);
+
 	void WaitForFwPrepThread(DWORD timeoutMs);
 	void WaitForFwBurnThread(DWORD timeoutMs);
 	bool BeginFirmwarePrepAsync();
@@ -147,6 +174,7 @@ public:
 	bool RunFirmwareBurnVerifyOrStop();
 	void StopCaptureForFirmwarePowerCycle();
 	void StopCaptureAndShowResults(bool forFwPowerCycle);
+	void ReleaseTestBoxAndNotifyPeer(bool allPass);
 	afx_msg LRESULT OnFwPrepDone(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnFwBurnDone(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnFwBurnProgress(WPARAM wParam, LPARAM lParam);
@@ -173,6 +201,8 @@ public:
 	void PaintPreviewCellStreamingWait(int dev, int vc);
 	void PaintPreviewCellNoSignal(int dev, int vc);
 	void PaintPreviewCellStreamNg(int dev, int vc);
+	void PaintPreviewCellsAgingMonitor();
+	void PaintPreviewCellAgingNg(int dev, int vc, LPCTSTR failReason);
 	void PaintPreviewCellsStreamState();
 	bool ShouldShowPreviewStreamState() const;
 	bool ShouldPaintPreviewStreamNg(int dev) const;

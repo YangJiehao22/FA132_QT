@@ -6,6 +6,8 @@
 struct GateTcpNotifyCfg
 {
 	bool enabled;
+	/** Requires enabled: Close test box after full run, before Play. */
+	bool closeBoxAfterTest;
 	TCHAR peerHost[256];
 	int peerPort;
 	bool onlyOnOverallOk;

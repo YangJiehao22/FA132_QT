@@ -153,6 +153,47 @@ static bool SelectMipiVc(int devId, int vcId)
 	return (iRet == DT_ERROR_OK);
 }
 
+/** Ruibo ISX031 unprotect: 8AC1 -> 8A12(0x18) -> verify 0x60D9==0, then bulk program. */
+static bool Sony031FlashUnprotect(
+	int devId,
+	int vcId,
+	unsigned char slave,
+	Sony031BurnResult* outResult)
+{
+	if (WriteReg(devId, slave, 0x8AC1, 0x00) != 1)
+	{
+		if (outResult != NULL)
+			outResult->errorCode = 4;
+		return false;
+	}
+	Sleep(3);
+	if (WriteReg(devId, slave, 0x8A12, 0x18) != 1)
+	{
+		if (outResult != NULL)
+			outResult->errorCode = 4;
+		return false;
+	}
+	Sleep(30);
+
+	unsigned short lockVal = 0;
+	if (ReadReg16(devId, slave, 0x60D9, &lockVal) != 1)
+	{
+		if (outResult != NULL)
+			outResult->errorCode = 4;
+		msgUtf8(DtZh::kFwUnprotectReadFail, devId, vcId, (unsigned)slave);
+		return false;
+	}
+	if ((lockVal & 0xFF) != 0x00)
+	{
+		if (outResult != NULL)
+			outResult->errorCode = 4;
+		msgUtf8(DtZh::kFwUnprotectNg, devId, vcId, (unsigned)slave, (unsigned)(lockVal & 0xFF));
+		return false;
+	}
+	Sleep(3);
+	return true;
+}
+
 } // namespace
 
 int FirmwareChipIdForVc(int vcId, const GateFirmwareBurnCfg& cfg)
@@ -162,6 +203,18 @@ int FirmwareChipIdForVc(int vcId, const GateFirmwareBurnCfg& cfg)
 	if (vcId < 0 || vcId >= MAX_VC)
 		return 0;
 	return (vcId >= split) ? 1 : 0;
+}
+
+int FirmwareChipPhaseCount(const GateFirmwareBurnCfg& cfg)
+{
+	return cfg.fa132DualChip ? 2 : 1;
+}
+
+bool VcOnFirmwareChipPhase(int vcId, int chipPhase, const GateFirmwareBurnCfg& cfg)
+{
+	if (!cfg.fa132DualChip)
+		return chipPhase == 0;
+	return FirmwareChipIdForVc(vcId, cfg) == chipPhase;
 }
 
 bool FirmwareSelectVcLane(int devId, int vcId, const GateFirmwareBurnCfg& cfg)
@@ -284,7 +337,8 @@ bool Sony031ReadSensorId(
 	int vcId,
 	const GateFirmwareBurnCfg& cfg,
 	unsigned char slaveHint,
-	Sony031SensorIdResult* outResult)
+	Sony031SensorIdResult* outResult,
+	bool logOk)
 {
 	Sony031SensorIdResult local = {};
 	if (outResult == NULL)
@@ -335,6 +389,7 @@ bool Sony031ReadSensorId(
 
 	outResult->success = true;
 	outResult->errorCode = 0;
+	if (logOk)
 	{
 		CStringA idA(outResult->sensorIdHex);
 		msgUtf8(DtZh::kFwSensorIdOk, devId, vcId, idA.GetString());
@@ -348,7 +403,8 @@ bool Sony031ReadSensorTempC(
 	const GateFirmwareBurnCfg& laneCfg,
 	unsigned char slaveHint,
 	const GateSensorTempI2c& tempCfg,
-	double* outTempC)
+	double* outTempC,
+	bool logOk)
 {
 	if (outTempC == NULL || !tempCfg.enabled || tempCfg.divisor == 0.0)
 		return false;
@@ -383,7 +439,8 @@ bool Sony031ReadSensorTempC(
 	}
 
 	*outTempC = raw / tempCfg.divisor + tempCfg.offset;
-	msgUtf8(DtZh::kFwSensorTempOk, devId, vcId, *outTempC, (unsigned)slave);
+	if (logOk)
+		msgUtf8(DtZh::kFwSensorTempOk, devId, vcId, *outTempC, (unsigned)slave);
 	return true;
 }
 
@@ -437,15 +494,9 @@ bool Sony031FlashProgram(
 	}
 	outResult->slaveId = slave;
 
-	msgUtf8(DtZh::kFwParallelVc, devId, vcId, (unsigned)slave);
 	FirmwareBurnReportProgress(devId, vcId, 0);
-	/* unprotect */
-	if (WriteReg(devId, slave, 0x8A12, 0x08) != 1
-		|| WriteReg(devId, slave, 0x8AC1, 0x00) != 1)
-	{
-		outResult->errorCode = 4;
+	if (!Sony031FlashUnprotect(devId, vcId, slave, outResult))
 		return false;
-	}
 	/* Enter bulk program mode (Ruibo: 3 ms between 0xf4 and 0xf7, then 3 ms before sectors). */
 	if (WriteReg(devId, slave, 0xffff, 0xf4) != 1)
 	{
@@ -513,35 +564,34 @@ bool Sony031FlashProgram(
 
 	outResult->success = true;
 	outResult->errorCode = 0;
-	msgUtf8(DtZh::kFwOk, devId, vcId);
 	return true;
 }
 
 namespace {
 
-#define FW_VERIFY_REG_COUNT 14
+#define FW_VERIFY_REG_COUNT 15
 
 /* Expected bytes for kVerifyReadRegs[] order (Ruibo ReadFlashCalibrationResult, latest). */
-static const unsigned char kExpectRabob065200[FW_VERIFY_REG_COUNT] = {
-	0x14, 0xA0, 0x19, 0x20, 0x14, 0x41, 0xA1, 0x00, 0x20, 0x26, 0x04, 0x28, 0x15, 0x50
+	static const unsigned char kExpectRabob065200[FW_VERIFY_REG_COUNT] = {
+		0x14, 0xA0, 0x19, 0x20, 0x14, 0x41, 0xA1, 0x00, 0x20, 0x26, 0x04, 0x28, 0x15, 0x50, 0x00
 };
 static const unsigned char kExpectRabom826200[FW_VERIFY_REG_COUNT] = {
-	0x13, 0xA0, 0x19, 0x20, 0x14, 0x41, 0x01, 0x00, 0x20, 0x26, 0x04, 0x01, 0x10, 0x09
+	0x13, 0xA0, 0x19, 0x20, 0x14, 0x41, 0xA1, 0x00, 0x20, 0x26, 0x06, 0x16, 0x14, 0x50, 0x00
 };
 static const unsigned char kExpectRabom826100[FW_VERIFY_REG_COUNT] = {
-	0x13, 0xB0, 0x19, 0x20, 0x10, 0x81, 0x01, 0x00, 0x20, 0x26, 0x04, 0x01, 0x09, 0x42
+	0x13, 0xB0, 0x19, 0x20, 0x10, 0x81, 0xA1, 0x00, 0x20, 0x26, 0x06, 0x16, 0x14, 0x50, 0x00
 };
 /* No separate table in Ruibo; same as RABOM82660 until product defines otherwise. */
 static const unsigned char kExpectRabom826200Flip[FW_VERIFY_REG_COUNT] = {
-	0x13, 0xA0, 0x19, 0x20, 0x14, 0x41, 0x01, 0x00, 0x20, 0x26, 0x04, 0x01, 0x10, 0x09
+	0x13, 0xA1, 0x19, 0x20, 0x14, 0x41, 0xA1, 0x00, 0x20, 0x26, 0x06, 0x16, 0x14, 0x50, 0x00
 };
 static const unsigned char kExpectRabom82660[FW_VERIFY_REG_COUNT] = {
-	0x13, 0xD0, 0x19, 0x20, 0x10, 0x81, 0x01, 0x00, 0x20, 0x26, 0x03, 0x31, 0x19, 0x34
+	0x13, 0xD0, 0x19, 0x20, 0x10, 0x81, 0xA1, 0x00, 0x20, 0x26, 0x06, 0x16, 0x14, 0x50, 0x00
 };
 
 static const unsigned short kVerifyReadRegs[FW_VERIFY_REG_COUNT] = {
 	0xC3FC, 0xC400, 0xC407, 0xC406, 0xC405, 0xC404,
-	0xC408, 0xC40C, 0xC413, 0xC412, 0xC411, 0xC410, 0xC415, 0xC414
+	0xC408, 0xC40C, 0xC413, 0xC412, 0xC411, 0xC410, 0xC415, 0xC414, 0x1E50
 };
 
 /** Index matches kFirmwareFovTypes[] (FIRMWARE_FOV_TYPE_COUNT). */
@@ -598,7 +648,6 @@ bool Sony031VerifyFlashCalibration(
 		msgUtf8(DtZh::kFwSlaveDetectFail, devId, vcId);
 		return false;
 	}
-	msgUtf8(DtZh::kFwVerifyVc, devId, vcId, (unsigned)slave, (LPCSTR)VerifyFovLabelA(fovTypeIndex), devId);
 
 	for (int i = 0; i < FW_VERIFY_REG_COUNT; i++)
 	{
@@ -611,13 +660,6 @@ bool Sony031VerifyFlashCalibration(
 		}
 		outResult->values[i] = v;
 	}
-
-	msgUtf8(DtZh::kFwVerifyRegs,
-		devId, vcId, (LPCSTR)VerifyFovLabelA(fovTypeIndex),
-		outResult->values[0], outResult->values[1], outResult->values[2], outResult->values[3],
-		outResult->values[4], outResult->values[5], outResult->values[6], outResult->values[7],
-		outResult->values[8], outResult->values[9], outResult->values[10], outResult->values[11],
-		outResult->values[12], outResult->values[13], (unsigned)slave);
 
 	for (int i = 0; i < FW_VERIFY_REG_COUNT; i++)
 	{
@@ -636,7 +678,5 @@ bool Sony031VerifyFlashCalibration(
 	}
 
 	outResult->success = true;
-	msgUtf8(DtZh::kFwVerifyOkLine,
-		devId, vcId, (LPCSTR)VerifyFovLabelA(fovTypeIndex));
 	return true;
 }
